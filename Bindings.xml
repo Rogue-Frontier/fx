@@ -1,0 +1,29 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<Bindings>
+	<Command name="Edit in Notepad++" targetId="cs_project" cmd="np {0}">
+		<Target>
+			<File ext="xml"/>
+			<File ext="json"/>
+			<File ext="txt"/>
+			<File ext="gitignore"/>
+		</Target>
+	</Command>
+	<Command name="Run C# Project" targetId="cs_project" cmd="dotnet run --project {0}">
+		<Target>
+			<Dir><File ext="csproj"/></Dir>
+			<File ext="csproj"/>
+		</Target>
+	</Command>
+	<Command name="Publish C# Project" targetId="cs_project" cmd="dotnet publish --project {0}">
+		<Target>
+			<Dir><File ext="csproj"/></Dir>
+			<File ext="csproj"/>
+		</Target>
+	</Command>
+	<Command name="Open Solution in Visual Studio" cmd="vi {0}">
+		<Target>
+			<Dir><File ext="sln"/></Dir>
+			<File ext="sln"/>
+		</Target>
+	</Command>
+</Bindings>
