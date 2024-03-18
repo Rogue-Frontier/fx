@@ -172,13 +172,13 @@ View[] Create () {
 		X = Pos.Percent(25),
 		Y = 1,
 		Width = Dim.Percent(50),
-		Height = Dim.Fill(1),
+		Height = 28,
 	};
 	var pathList = new ListView() {
 		X = 0,
 		Y = 0,
 		Width = Dim.Fill(),
-		Height = Dim.Fill(2),
+		Height = Dim.Fill(),
 		AllowsMultipleSelection = true,
 		AllowsMarking = true,
 		Source = new ListWrapper(cwdData),
@@ -190,6 +190,13 @@ View[] Create () {
 			Disabled = new(Color.Red, Color.Black)
 		}
 	};
+	var properties = new FrameView("Properties") {
+		X = Pos.Percent(25),
+		Y = 29,
+		Width = Dim.Percent(50),
+		Height = Dim.Fill(1),
+	};
+
 	#endregion
 	#region right
 	var procWind = new FrameView("Processes", new() { BorderStyle = BorderStyle.Single, DrawMarginFrame = true, Effect3D = false }) {
@@ -239,7 +246,7 @@ View[] Create () {
 		{clipWind, []},
 		{pathWind, [pathList]},
 		{procWind, [procList]},
-		{window,   [heading, /*goPrev, goNext, goLeft,*/ freqWind, clipWind, pathWind, procWind, term]},
+		{window,   [heading, /*goPrev, goNext, goLeft,*/ freqWind, clipWind, pathWind, properties, procWind, term]},
 	};
 	foreach(var (parent, children) in tree) {
 		parent.Add(children);
@@ -610,22 +617,27 @@ View[] Create () {
 						var index = git.repo.Index;
 						var entry = index[local];
 
+						bool canUnstage = false;
 						bool canStage = true;
 						if(entry != null) {
-							yield return new MenuItem("Unstage", "", () => {
-								index.Remove(local);
-							});
+							
 
 							var blob = git.repo.Lookup<Blob>(entry.Id);
 							var b = blob.GetContentText();
 							var f = File.ReadAllText(path).Replace("\r","");
 							if(b == f) {
+								canUnstage = true;
 								canStage = false;
 							}
 						}
 						if(canStage) {
 							yield return new MenuItem("Stage", "", () => {
 								index.Add(local);
+							});
+						}
+						if(canUnstage) {
+							yield return new MenuItem("Unstage", "", () => {
+								index.Remove(local);
 							});
 						}
 					}
