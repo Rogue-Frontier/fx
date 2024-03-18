@@ -1,11 +1,20 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <Bindings>
-	<Command name="Edit in Notepad++" targetId="cs_project" cmd="np {0}">
+	<Command name="Open in Notepad++" cmd="np '{0}'">
 		<Target>
 			<File ext="xml"/>
 			<File ext="json"/>
 			<File ext="txt"/>
 			<File ext="gitignore"/>
+			<File pattern=".*"/>
+		</Target>
+	</Command>
+	<Command name="Open Github" cmd="gh repo view --web">
+		<Target>
+			<Dir>
+				<Dir name=".git"/>
+				<Dir name=".github"/>
+			</Dir>
 		</Target>
 	</Command>
 	<Command name="Run C# Project" targetId="cs_project" cmd="dotnet run --project {0}">

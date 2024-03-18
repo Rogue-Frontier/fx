@@ -15,26 +15,6 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Terminal.Gui;
 using static System.Net.Mime.MediaTypeNames;
-
-namespace fx
-{
-
-	public class Explorer : Terminal.Gui.Window {
-		public Explorer() {
-			X = 0;
-			Y = 0;
-			Width = Dim.Fill(0);
-			Height = Dim.Fill(0);
-			
-			Modal = false;
-			Border.BorderStyle = BorderStyle.Single;
-			Border.Effect3D = false;
-			Border.DrawMarginFrame = true;
-			TextAlignment = TextAlignment.Left;
-			Title = "fx";
-		}
-	}
-}
 public interface Regrettable {
 	public static virtual Regex Pattern { get; }
 }
