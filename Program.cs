@@ -791,9 +791,10 @@ View[] Create () {
 			}
 		}
 		Process Run(string cmd) {
+			var setPath = $"set PATH=%PATH%;{Path.GetFullPath("Scripts")}";
 			var pi = new ProcessStartInfo("cmd.exe") {
 				WorkingDirectory = cwd,
-				Arguments = @$"/c ""{cmd}""",
+				Arguments = @$"/c ""{setPath}\n{cmd}""",
 				UseShellExecute = true,
 			};
 			var p = new Process() { StartInfo = pi };
