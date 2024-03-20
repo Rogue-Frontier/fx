@@ -39,7 +39,7 @@ var l = j with {
 	a = 2
 };
 
-string save = "fx.json";
+string save = "fx.state.yaml";
 void Save () {
 	File.WriteAllText(save, new Serializer().Serialize(new State() {
 		cwd = cwd,
@@ -55,7 +55,7 @@ void Load () {
 		try {
 			(cwd, restricted, lastIndex) = new Deserializer().Deserialize<State>(File.ReadAllText(save).Replace(userprofileHide, userprofile));
 
-			File.Delete(save);
+			//File.Delete(save);
 
 			restricted = new(restricted.Select(s => s.Replace("%CWD%", cwd)));
 			lastIndex = new(lastIndex);
@@ -71,7 +71,16 @@ AppDomain.CurrentDomain.ProcessExit += (a, e) => {
 };
 Command[] commands;
 void InitCommands () {
-	commands = [.. XElement.Load("Bindings.xml").Elements().Select(Command.Parse)];
+	var bindings = Path.GetFullPath("Bindings.xml");
+	
+	commands = [.. XElement.Load(bindings).Elements().Select(Command.Parse)];
+#if false
+	Console.WriteLine(bindings);
+	foreach(var item in commands) {
+		Console.WriteLine($"{item.name}: {item.exe}");
+    }
+	Console.ReadLine();
+#endif
 }
 InitCommands();
 
@@ -608,37 +617,36 @@ View[] Create () {
 
 					}, canExecute: () => !restricted.Contains(path));
 				} else {
-					if(git is not { patch: { }patch }) {
-						yield break;
-					}
-					var local = path.Replace(git.root + Path.DirectorySeparatorChar, "");
-					var p = patch[local];
-					if(p?.Status == ChangeKind.Modified) {
-						var index = git.repo.Index;
-						var entry = index[local];
+					if(git is { patch: { } patch }) {
+						var local = path.Replace(git.root + Path.DirectorySeparatorChar, "");
+						var p = patch[local];
+						if(p?.Status == ChangeKind.Modified) {
+							var index = git.repo.Index;
+							var entry = index[local];
 
-						bool canUnstage = false;
-						bool canStage = true;
-						if(entry != null) {
-							
+							bool canUnstage = false;
+							bool canStage = true;
+							if(entry != null) {
 
-							var blob = git.repo.Lookup<Blob>(entry.Id);
-							var b = blob.GetContentText();
-							var f = File.ReadAllText(path).Replace("\r","");
-							if(b == f) {
-								canUnstage = true;
-								canStage = false;
+
+								var blob = git.repo.Lookup<Blob>(entry.Id);
+								var b = blob.GetContentText();
+								var f = File.ReadAllText(path).Replace("\r", "");
+								if(b == f) {
+									canUnstage = true;
+									canStage = false;
+								}
 							}
-						}
-						if(canStage) {
-							yield return new MenuItem("Stage", "", () => {
-								index.Add(local);
-							});
-						}
-						if(canUnstage) {
-							yield return new MenuItem("Unstage", "", () => {
-								index.Remove(local);
-							});
+							if(canStage) {
+								yield return new MenuItem("Stage", "", () => {
+									index.Add(local);
+								});
+							}
+							if(canUnstage) {
+								yield return new MenuItem("Unstage", "", () => {
+									index.Remove(local);
+								});
+							}
 						}
 					}
 				}
@@ -790,17 +798,6 @@ View[] Create () {
 				Run(i.path);
 			}
 		}
-		Process Run(string cmd) {
-			var setPath = $"set PATH=%PATH%;{Path.GetFullPath("Scripts")}";
-			var pi = new ProcessStartInfo("cmd.exe") {
-				WorkingDirectory = cwd,
-				Arguments = @$"/c ""{setPath}\n{cmd}""",
-				UseShellExecute = true,
-			};
-			var p = new Process() { StartInfo = pi };
-			p.Start();
-			return p;
-		}
 		void ListProcesses () {
 			procData.Clear();
 			procData.AddRange(Process.GetProcesses().Where(
@@ -808,6 +805,19 @@ View[] Create () {
 				).Select(p => new ProcItem(p)));
 
 			procList.SetNeedsDisplay();
+		}
+		Process Run (string cmd) {
+			//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
+
+			var cmdArgs = @$"/c {cmd} & pause";
+			var pi = new ProcessStartInfo("cmd.exe") {
+				WorkingDirectory = cwd,
+				Arguments = $"{cmdArgs}",
+				UseShellExecute = true,
+			};
+			var p = new Process() { StartInfo = pi };
+			p.Start();
+			return p;
 		}
 	}
 }
@@ -823,11 +833,26 @@ public static class Parse {
 	}
 	public static string A (this XElement e, string key) => e.Attribute(key).Value;
 	public static string? TA (this XElement e, string key) => e.Attribute(key)?.Value;
+	public static bool TA (this XElement e, string key, out string value) {
+		if(e.Attribute(key)is{Value:{}v}) {
+			value = v;
+			return true;
+		} else {
+			value = null;
+			return false;
+		}
+	}
 }
-public record Command(string name, string cmd, ITarget[] targets) {
+public record Command(string name, string exe, ITarget[] targets) {
 	public static Command Parse(XElement e) {
 		var name = e.A("name");
-		var cmd = e.A("cmd");
+		var cmd = "";
+			cmd =
+				e.TA("fmt", out cmd) ?
+					$@"""{cmd}""" :
+				e.TA("xref", out cmd) ?
+					@$"""{Path.GetFullPath(File.ReadAllText(cmd))}"" {{0}}" :
+					throw new Exception();
 		return new Command(name, cmd, [..e.Element("Target").Elements().Select(e => (ITarget)(e.Name.LocalName switch {
 			"Dir" => TargetDir.Parse(e),
 			"File" => TargetFile.Parse(e),
@@ -836,14 +861,14 @@ public record Command(string name, string cmd, ITarget[] targets) {
 	}
 	public bool Accept(string path) =>
 		targets.Any(t => t.Accept(path));
-	public string GetCmd (string path) => string.Format(cmd, path);
+	public string GetCmd (string target) => string.Format(exe, target);
 }
 public interface ITarget {
 	public bool Accept(string path);
 }
 public record TargetFile([StringSyntax("Regex")] string pattern = ".+") : ITarget {
 	public static TargetFile Parse(XElement e) {
-		return new(e.TA("pattern") ?? $"[^\\.]*\\.{e.TA("ext")}");
+		return new(e.TA("pattern") ?? $"[^\\.]*\\.{e.TA("ext")}$");
 	}
 	public bool Accept (string path) {
 		return !Conditions().Contains(false);
@@ -910,4 +935,5 @@ public record PathItem (string name, string path, bool dir, bool restricted) {
 	public override string ToString () => str;
 }
 public record State (string cwd, HashSet<string> restricted, Dictionary<string, int> lastIndex) {
-	public State () : this(null, null, null) { } }
+	public State () : this(null, null, null) { }
+}

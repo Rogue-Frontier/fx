@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "cx": {
+      "commandName": "Project"
+    },
+    "cxTest": {
+      "commandName": "Project",
+      "commandLineArgs": "test.cx"
+    }
+  }
+}
