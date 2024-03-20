@@ -17,13 +17,13 @@
 			</Dir>
 		</Target>
 	</Command>
-	<Command name="Run C# Project" targetId="cs_project" fmt="dotnet run --project {0}">
+	<Command name="Run C# Project" fmt="dotnet run --project {0}">
 		<Target>
 			<Dir><File ext="csproj"/></Dir>
 			<File ext="csproj"/>
 		</Target>
 	</Command>
-	<Command name="Publish C# Project" targetId="cs_project" fmt="dotnet publish --project {0}">
+	<Command name="Publish C# Project" fmt="dotnet publish --project {0}">
 		<Target>
 			<Dir><File ext="csproj"/></Dir>
 			<File ext="csproj"/>

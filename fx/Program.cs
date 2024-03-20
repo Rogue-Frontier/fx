@@ -160,6 +160,7 @@ View[] Create () {
 		Width = Dim.Fill(),
 		Height = Dim.Fill()
 	};
+	/*
 	var clipCutList = new ListView() {
 		X = 0,
 		Y = 0,
@@ -174,7 +175,7 @@ View[] Create () {
 	};
 	clipTab.AddTab(new("Cut", clipCutList), false);
 	clipTab.AddTab(new("History", clipHistList), false);
-
+	*/
 	#endregion
 	#region center
 	var pathWind = new FrameView("Directory") {
