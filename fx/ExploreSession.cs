@@ -10,7 +10,6 @@ using System.Threading.Tasks;
 using Terminal.Gui;
 using fx;
 using File = System.IO.File;
-using GamerLib;
 using System.Collections;
 using System.Reflection;
 using static Ctx;
@@ -25,7 +24,7 @@ public class ExploreSession : ITab {
 	private Ctx ctx;
 	private Fx fx => ctx.fx;
 
-	Dictionary<string, PathItem> pathData = new();
+	//Dictionary<string, PathItem> pathData = new();
 	Dictionary<string, GitItem> map = new();
 	private List<PathItem> cwdData = new();
 	private List<GitItem> gitData = new();
@@ -523,13 +522,13 @@ public class ExploreSession : ITab {
 						if(item.HasProp(Props.IS_UNSTAGED)) {
 							yield return new MenuItem("Stage", "", () => {
 								Commands.Stage(pair.repo, pair.local);
-								RefreshChanges();
+								RefreshCwd();
 							});
 						} else if(item.HasProp(Props.IS_STAGED)) {
 							var repoLocal = ctx.git.GetRepoLocal(item.path);
 							yield return new MenuItem("Unstage", "", () => {
 								Commands.Unstage(pair.repo, pair.local);
-								RefreshChanges();
+								RefreshCwd();
 							});
 						}
 					}
@@ -610,9 +609,6 @@ public class ExploreSession : ITab {
 					RunProc(i.path);
 				}
 
-			}
-			void RefreshCwd () {
-				SetCwd(fx.cwd);
 			}
 			Process RunProc (string cmd) {
 				//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
@@ -696,51 +692,53 @@ public class ExploreSession : ITab {
 	PathItem CreatePathItem (string f) =>
 		new PathItem(Path.GetFileName(f), f, new(GetProps(f)));
 
-
-	void SetCwd (string s) {
+	void RefreshListing (string s) {
 		try {
-			var paths = new List<PathItem>([
+			pathList.SetSource(cwdData = new List<PathItem>([
 				..Directory.GetDirectories(s).Select(CreatePathItem),
-					..Directory.GetFiles(s).Select(CreatePathItem)
-			]);
-			cwdData.Clear();
-			cwdData.AddRange(paths);
-			pathList.SetSource(cwdData);
-			/*
-			if(s == cwd) {
-				goto UpdateListing;
-			}
-			*/
-
-
-			fx.lastIndex[fx.cwd] = pathList.SelectedItem;
-			fx.cwd = Path.GetFullPath(s);
-
-			UpdateGit();
-
-
-			var anonymize = true;
-			var userProfile = ctx.USER_PROFILE;
-			var showCwd = fx.cwd;
-
-			if(fx.workroot is { }root) {
-				showCwd = showCwd.Replace(root, Fx.WORK_ROOT);
-				userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
-			}
-
-			if(anonymize) {
-				showCwd = showCwd.Replace(userProfile, Ctx.USER_PROFILE_MASK);
-			}
-			//Anonymize
-			addressBar.Text = showCwd;
-			Console.Title = showCwd;
-
-			pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), fx.lastIndex.GetValueOrDefault(fx.cwd, 0));
-
-
-		} catch(UnauthorizedAccessException e) {
-
+				..Directory.GetFiles(s).Select(CreatePathItem)
+			]));
+		}catch(UnauthorizedAccessException e) {
 		}
+	}
+	void RefreshAddressBar () {
+		var anonymize = true;
+		var userProfile = ctx.USER_PROFILE;
+		var showCwd = fx.cwd;
+		if(fx.workroot is { } root) {
+			showCwd = showCwd.Replace(root, Fx.WORK_ROOT);
+			userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
+		}
+		if(anonymize) {
+			showCwd = showCwd.Replace(userProfile, Ctx.USER_PROFILE_MASK);
+		}
+		//Anonymize
+		addressBar.Text = showCwd;
+		Console.Title = showCwd;
+
+		pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), fx.lastIndex.GetValueOrDefault(fx.cwd, 0));
+		pathList.SetNeedsDisplay();
+	}
+	void RefreshCwd () {
+		RefreshListing(fx.cwd);
+		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
+		if(ctx.git != null) {
+			RefreshChanges();
+		}
+		RefreshAddressBar();
+	}
+	void SetCwd (string s) {
+		RefreshListing(s);
+
+		/*
+		if(s == cwd) {
+			goto UpdateListing;
+		}
+		*/
+		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
+		fx.cwd = Path.GetFullPath(s);
+		RefreshGit();
+		RefreshAddressBar();
 	}
 	bool GoPath (string? dest) {
 		var f = Path.GetFileName(fx.cwd);
@@ -780,7 +778,7 @@ public class ExploreSession : ITab {
 		yield return full;
 		goto Up;
 	}
-	private void UpdateGit () {
+	private void RefreshGit () {
 		//Replace with property check?
 		if(ctx.git is { root: { } root, repo: { } repo }) {
 			if(fx.cwd.StartsWith(root)) {
@@ -812,9 +810,9 @@ public class ExploreSession : ITab {
 				}
 			}
 		}
-		var items = GetItems();
+		var items = GetItems().ToList();
 		map = items.ToDictionary(item => item.path);
-		gitData = items.ToList();
+		gitData = items;
 		gitList.SetSource(gitData);
 		foreach(var (i, it) in gitData.Index()) {
 			gitList.Source.SetMark(i, it.staged);
