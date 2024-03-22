@@ -11,33 +11,30 @@ using Terminal.Gui;
 using fx;
 using File = System.IO.File;
 using GamerLib;
+using System.Collections;
 namespace fx;
-public class FileTab {
+public class ExploreSession : ITab {
+	public string TabName => "Explore";
+	public View TabView => root;
 
 	public View root;
-	public FileTab (Main main) {
-		var ctx = main.ctx;
-		var fx = ctx.fx;
-		var Prop = new {
-			IS_LOCKED = new Prop("locked", "Locked"),
-			IS_DIRECTORY = new Prop("directory", "Directory"),
-			IS_STAGED = new Prop("gitStagedChanges", "Staged Changes"),
-			IS_UNSTAGED = new Prop("gitUnstagedChanges", "Unstaged Changes"),
-			IS_SOLUTION = new Prop("visualStudioSolution", "Visual Studio Solution"),
-			IS_REPOSITORY = new Prop("gitRepository", "Git Repository"),
-			IS_ZIP = new Prop("zipArchive", "Zip Archive"),
 
-			IS_LINK_TO = new PropGen<string>("link", dest => $"Link To: {dest}"),
-			IN_REPOSITORY = new PropGen<Repository>("gitRepositoryItem", repo => $"In Repository: {repo.Info.Path}"),
-			IN_LIBRARY = new PropGen<Library>("libraryItem", library => $"In Library: {library.name}"),
-			IN_SOLUTION = new PropGen<string>("solutionItem", solutionPath => $"In Solution: {solutionPath}"),
-			IN_ZIP = new PropGen<string>("zipItem", zipRoot => $"In Zip: {zipRoot}"),
-		};
+	private Ctx ctx;
+	private Fx fx => ctx.fx;
+
+	private List<PathItem> cwdData = new();
+	private List<GitItem> gitData = new();
+
+	private Button goPrev, goNext, goLeft;
+	private TextField addressBar;
+	public ListView pathList;
+	private ListView gitList;
+	public ExploreSession (Main main) {
+
+		ctx = main.ctx;
 		var favData = new List<PathItem>();
-		var cwdData = new List<PathItem>();
 		var cwdRecall = (string)null;
 		var procData = new List<ProcItem>();
-		var gitData = new List<GitItem>();
 
 		root = new View() {
 			X = 0,
@@ -45,10 +42,10 @@ public class FileTab {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		var goPrev = new Button("<-") { X = 0, TabStop = false };
-		var goNext = new Button("->") { X = 6, TabStop = false };
-		var goLeft = new Button("..") { X = 12, TabStop = false };
-		var addressBar = new TextField() {
+		goPrev = new Button("<-") { X = 0, TabStop = false };
+		goNext = new Button("->") { X = 6, TabStop = false };
+		goLeft = new Button("..") { X = 12, TabStop = false };
+		addressBar = new TextField() {
 			X = Pos.Percent(25) + 1,
 			Y = 0,
 			Width = Dim.Fill() - 1,
@@ -100,6 +97,8 @@ public class FileTab {
 					Width = Dim.Fill(),
 					Height = Dim.Fill()
 				};
+
+				if(false)
 				SView.ForTuple((string name, View v) => view.AddTab(new TabView.Tab(name, v), false), [
 					("Cut", clipCutList),
 				("History", clipHistList)
@@ -116,7 +115,7 @@ public class FileTab {
 			Width = Dim.Percent(50),
 			Height = 28,
 		};
-		var pathList = new ListView() {
+		pathList = new ListView() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -164,7 +163,7 @@ public class FileTab {
 			Height = Dim.Percent(50),
 		};
 
-		var gitList = new ListView() {
+		gitList = new ListView() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -419,6 +418,11 @@ public class FileTab {
 			ContextMenu ShowContext (string path) {
 				IEnumerable<MenuItem> GetCommon () {
 
+
+
+
+
+
 					yield return new MenuItem(Path.GetFileName(path), null, null, () => false);
 					yield return new MenuItem("----", null, null, () => false);
 					yield return new MenuItem("Properties", null, () => { });
@@ -555,24 +559,7 @@ public class FileTab {
 			}
 			bool GetIndex (out int i) =>
 				(i = Math.Min(cwdData.Count - 1, pathList.SelectedItem)) != -1;
-			IEnumerable<int> GetMarkedIndex () =>
-				Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
-			IEnumerable<PathItem> GetMarkedItems () =>
-				GetMarkedIndex().Select(i => cwdData[i]);
-			bool GoPath (string? dest) {
-				var f = Path.GetFileName(fx.cwd);
-				if(Directory.Exists(dest) is { } b && b) {
-					fx.cwdNext.Clear();
-					fx.cwdPrev.Push(fx.cwd);
-					SetCwd(dest);
-					UpdateButtons();
-
-					if(cwdData.FirstOrDefault(p => p.local == f) is { } item) {
-						pathList.SelectedItem = cwdData.IndexOf(item);
-					}
-				}
-				return b;
-			}
+			
 			bool GoPrev (int times = 1) => Enumerable.Range(0, times).All(_ => {
 				if(fx.cwdPrev.TryPop(out var prev) is { } b && b) {
 					fx.cwdNext.Push(fx.cwd);
@@ -596,20 +583,21 @@ public class FileTab {
 				if(!(pathList.SelectedItem < cwdData.Count)) {
 					return;
 				}
-				var i = cwdData[pathList.SelectedItem];
-				Go(i);
+				Go(cwdData[pathList.SelectedItem]);
 				void Go (PathItem i) {
 
-					if(i.properties.Contains(Prop.IS_LOCKED)) {
+
+
+					if(i.properties.Contains(Props.IS_LOCKED)) {
 						return;
 					}
-					if(i.propertyDict.TryGetValue(Prop.IS_LINK_TO.id, out var link)) {
+					if(i.propertyDict.TryGetValue(Props.IS_LINK_TO.id, out var link)) {
 						var dest = ((Prop<string>)link).data;
 						var destItem = CreatePathItem(dest);
 						Go(destItem);
 						return;
 					}
-					if(i.propertyDict.ContainsKey(Prop.IS_ZIP.id)) {
+					if(i.propertyDict.ContainsKey(Props.IS_ZIP.id)) {
 						using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
 							foreach(ZipArchiveEntry entry in zip.Entries) {
 								Debug.Print(entry.FullName);
@@ -617,7 +605,7 @@ public class FileTab {
 						}
 						return;
 					}
-					if(i.properties.Contains(Prop.IS_DIRECTORY)) {
+					if(i.properties.Contains(Props.IS_DIRECTORY)) {
 						GoPath(i.path);
 						return;
 					}
@@ -651,63 +639,10 @@ public class FileTab {
 		void InitCwd () {
 			SetCwd(fx.cwd);
 		}
-		void UpdateButtons () =>
-			SView.ForTuple((Button button, IEnumerable<string> items) => {
-				button.Enabled = items.Any();
-			}, [
-				(goLeft, Up()), (goNext, fx.cwdNext), (goPrev, fx.cwdPrev)
-			]);
 		void UpdateProcesses () {
 			procData.Clear();
 			procData.AddRange(Process.GetProcesses().Where(p => p.MainWindowHandle != 0).Select(p => new ProcItem(p)));
 			procList.SetNeedsDisplay();
-		}
-		void UpdateGit () {
-			if(ctx.git is { root: { } root, repo: { } repo }) {
-				if(fx.cwd.StartsWith(root)) {
-					ctx.git.RefreshPatch();
-					UpdateChanges();
-				} else {
-					gitData.Clear();
-					repo.Dispose();
-					ctx.git = null;
-				}
-			} else {
-				if(Repository.IsValid(fx.cwd)) {
-					ctx.git = new(fx.cwd);
-					UpdateChanges();
-				}
-			}
-
-			void UpdateChanges () {
-
-				gitData.Clear();
-
-				var index = ctx.git.repo.Index;
-				var changes = ctx.git.patch.Select(patch => {
-					var local = patch.Path;
-					var entry = index[local];
-
-					bool staged = false;
-					if(entry != null) {
-						var blob = ctx.git.repo.Lookup<Blob>(entry.Id);
-						var b = blob.GetContentText();
-						var f = File.ReadAllText($"{ctx.git.root}/{local}").Replace("\r", "");
-						staged = f == b;
-					}
-					var item = new GitItem(local, patch, staged);
-					return item;
-				}).OrderByDescending(item => item.staged ? 1 : 0);
-				gitData.AddRange([.. changes]);
-				gitList.SetSource(gitData);
-				foreach(var (i, it) in gitData.Index()) {
-					gitList.Source.SetMark(i, it.staged);
-				}
-				gitList.OpenSelectedItem += e => {
-					//Stage/Unstage
-					int i = 0;
-				};
-			}
 		}
 		/*
 		//void AddListenersMulti ((View view, MousePressGen MouseClick, KeyPressGen KeyPress)[] pairs) => pairs.ToList().ForEach(pair => AddListeners(pair.view, pair.MouseClick, pair.KeyPress));
@@ -717,81 +652,160 @@ public class FileTab {
 			if(MouseClick != null) AddMouseClick(view, MouseClick);
 		}
 		*/
-		PathItem CreatePathItem (string f) =>
-			new PathItem(Path.GetFileName(f), f, Directory.Exists(f), new(GetProps(f)));
-		IEnumerable<IProp> GetProps (string path) {
-			if(fx.locked.Contains(path)) {
-				yield return Prop.IS_LOCKED;
+		
+		
+	}
+	public IEnumerable<int> GetMarkedIndex () =>
+				Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
+	public IEnumerable<PathItem> GetMarkedItems () =>
+		GetMarkedIndex().Select(i => cwdData[i]);
+	IEnumerable<IProp> GetProps (string path) {
+		if(fx.locked.Contains(path)) {
+			yield return Props.IS_LOCKED;
+		}
+		if(Directory.Exists(path)) {
+			yield return Props.IS_DIRECTORY;
+		} else {
+			if(path.EndsWith(".sln")) {
+				yield return Props.IS_SOLUTION;
 			}
-			if(Directory.Exists(path)) {
-				yield return Prop.IS_DIRECTORY;
-			} else {
-				if(path.EndsWith(".sln")) {
-					yield return Prop.IS_SOLUTION;
-				}
-				if(path.EndsWith(".lnk")) {
-					// WshShellClass shell = new WshShellClass();
-					WshShell shell = new WshShell(); //Create a new WshShell Interface
-					IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
-					yield return Prop.IS_LINK_TO.Generate(link.TargetPath);
-				}
-				if(path.EndsWith(".zip")) {
-					yield return Prop.IS_ZIP;
-				}
+			if(path.EndsWith(".lnk")) {
+				// WshShellClass shell = new WshShellClass();
+				WshShell shell = new WshShell(); //Create a new WshShell Interface
+				IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
+				yield return ((PropGen<string>)Props.IS_LINK_TO).Generate(link.TargetPath);
+			}
+			if(path.EndsWith(".zip")) {
+				yield return Props.IS_ZIP;
 			}
 		}
-		void SetCwd (string s) {
-			try {
-				var paths = new List<PathItem>([
-					..Directory.GetDirectories(s).Select(CreatePathItem),
+	}
+	PathItem CreatePathItem (string f) =>
+		new PathItem(Path.GetFileName(f), f, Directory.Exists(f), new(GetProps(f)));
+
+
+	void SetCwd (string s) {
+		try {
+			var paths = new List<PathItem>([
+				..Directory.GetDirectories(s).Select(CreatePathItem),
 					..Directory.GetFiles(s).Select(CreatePathItem)
-				]);
-				cwdData.Clear();
-				cwdData.AddRange(paths);
-				pathList.SetSource(cwdData);
-				/*
-				if(s == cwd) {
-					goto UpdateListing;
-				}
-				*/
+			]);
+			cwdData.Clear();
+			cwdData.AddRange(paths);
+			pathList.SetSource(cwdData);
+			/*
+			if(s == cwd) {
+				goto UpdateListing;
+			}
+			*/
 
 
-				fx.lastIndex[fx.cwd] = pathList.SelectedItem;
-				fx.cwd = Path.GetFullPath(s);
+			fx.lastIndex[fx.cwd] = pathList.SelectedItem;
+			fx.cwd = Path.GetFullPath(s);
 
-				UpdateGit();
-
-
-				var anonymize = true;
-				var showCwd = fx.cwd;
-				if(anonymize) {
-					showCwd = showCwd.Replace(ctx.USER_PROFILE, Ctx.USER_PROFILE_MASK);
-				}
-				//Anonymize
-				addressBar.Text = showCwd;
-				Console.Title = showCwd;
-
-				pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), fx.lastIndex.GetValueOrDefault(fx.cwd, 0));
+			UpdateGit();
 
 
-			} catch(UnauthorizedAccessException e) {
+			var anonymize = true;
+			var showCwd = fx.cwd;
+			if(anonymize) {
+				showCwd = showCwd.Replace(ctx.USER_PROFILE, Ctx.USER_PROFILE_MASK);
+			}
+			//Anonymize
+			addressBar.Text = showCwd;
+			Console.Title = showCwd;
 
+			pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), fx.lastIndex.GetValueOrDefault(fx.cwd, 0));
+
+
+		} catch(UnauthorizedAccessException e) {
+
+		}
+	}
+	bool GoPath (string? dest) {
+		var f = Path.GetFileName(fx.cwd);
+		if(Directory.Exists(dest) is { } b && b) {
+			fx.cwdNext.Clear();
+			fx.cwdPrev.Push(fx.cwd);
+			SetCwd(dest);
+			UpdateButtons();
+
+			if(cwdData.FirstOrDefault(p => p.local == f) is { } item) {
+				pathList.SelectedItem = cwdData.IndexOf(item);
 			}
 		}
-		IEnumerable<string> Up () {
-			string
-				p = fx.cwd,
-				prev = p;
-			Up:
-			p = Path.Combine(p, "..");
-			if(!Directory.Exists(p))
-				yield break;
-			var full = Path.GetFullPath(p);
-			if(full == prev)
-				yield break;
-			prev = full;
-			yield return full;
-			goto Up;
+		return b;
+	}
+	void UpdateButtons () =>
+		SView.ForTuple((Button button, IEnumerable<string> items) => {
+			button.Enabled = items.Any();
+		}, [
+			(goLeft, Up()), (goNext, fx.cwdNext), (goPrev, fx.cwdPrev)
+		]);
+	private IEnumerable<string> Up () {
+		string
+			p = fx.cwd,
+			prev = p;
+		Up:
+		p = Path.Combine(p, "..");
+		if(!Directory.Exists(p))
+			yield break;
+		var full = Path.GetFullPath(p);
+		if(full == prev)
+			yield break;
+		prev = full;
+		yield return full;
+		goto Up;
+	}
+
+	private void UpdateGit () {
+		if(ctx.git is { root: { } root, repo: { } repo }) {
+			if(fx.cwd.StartsWith(root)) {
+				ctx.git.RefreshPatch();
+				RefreshChanges();
+			} else {
+				gitData.Clear();
+				repo.Dispose();
+				ctx.git = null;
+			}
+		} else {
+			if(Repository.IsValid(fx.cwd)) {
+				ctx.git = new(fx.cwd);
+				RefreshChanges();
+			}
+		}
+
+		void RefreshChanges () {
+			if(true) {
+				return;
+			}
+			gitData.Clear();
+
+			var index = ctx.git.repo.Index;
+			var changes = ctx.git.patch.Select(patch => {
+				var local = patch.Path;
+				var entry = index[local];
+
+				bool staged = false;
+				if(entry != null) {
+					var blob = ctx.git.repo.Lookup<Blob>(entry.Id);
+					var b = blob.GetContentText();
+					var f = File.ReadAllText($"{ctx.git.root}/{local}").Replace("\r", "");
+					staged = f == b;
+				}
+				var item = new GitItem(local, patch, staged);
+				return item;
+			}).OrderByDescending(item => item.staged ? 1 : 0);
+			gitData.AddRange([.. changes]);
+			gitList.SetSource(gitData);
+			foreach(var (i, it) in gitData.Index()) {
+				gitList.Source.SetMark(i, it.staged);
+			}
+			gitList.OpenSelectedItem += e => {
+				//Stage/Unstage
+				int i = 0;
+			};
+
 		}
 	}
 }

@@ -6,9 +6,12 @@ using System.Threading.Tasks;
 using Terminal.Gui;
 
 namespace fx;
-public class HomeTab {
+public class HomeSession : ITab {
+
+	public string TabName => "Home";
+	public View TabView => root;
 	public View root;
-	public HomeTab() {
+	public HomeSession() {
 
 		root = new View() {
 			X = 0,

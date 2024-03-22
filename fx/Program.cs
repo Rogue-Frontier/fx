@@ -20,18 +20,18 @@ using Terminal.Gui.Trees;
 using System.IO;
 using System.IO.Compression;
 using IWshRuntimeLibrary;
-using GamerLib;
 using File = System.IO.File;
 using fx;
 using System.Reflection.Metadata;
-
-var main = new Main();
-AppDomain.CurrentDomain.ProcessExit += (a, e) => {
-	main.ctx.Save();
-};
 Application.Init();
 try {
 	Application.UseSystemConsole = true;
+
+	var main = new Main();
+	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
+		main.ctx.Save();
+	};
+
 	Application.Top.Add(main.root);
 	Application.Run();
 } finally {
@@ -41,25 +41,30 @@ public class Main {
 	public Ctx ctx;
 	public View[] root;
 	public TextField term;
-
 	public TabView tabs;
-
 	public bool readProc = false;
+
+
+	private ExploreSession exploreSession;
+
 	public void ReadProc(Process proc) {
 
 	}
 	public void EditFile (FindLine line) {
 
 	}
+	public bool GoPath(string path) {
+		return false;
+	}
 	public void FindIn (string path) {
-		var find = new FindTab(this);
+		var find = new FindSession(this);
 		tabs.AddTab(new TabView.Tab("Find", find.root), true);
 		find.rootBar.Text = path;
 		find.FindDirs();
 		find.tree.ExpandAll();
 	}
-	public void AddTab(string name, View view) {
-		tabs.AddTab(new TabView.Tab(name, view), false);
+	public void AddTab(TabView.Tab tab) {
+		tabs.AddTab(tab, false);
 	}
 
 	public void FocusTerm () {
@@ -68,6 +73,8 @@ public class Main {
 	public Main () {
 		ctx = new Ctx();
 		ctx.Load();
+
+		var fx = ctx.fx;
 
 		term = new TextField() {
 			X = 0,
@@ -95,7 +102,7 @@ public class Main {
 				}
 				,
 				Key.Enter when t == "cut" => () => {
-					var items = GetMarkedItems().ToArray();
+					var items = exploreSession.GetMarkedItems().ToArray();
 				}
 				,
 				Key.Enter when t.Any() => delegate {
@@ -107,25 +114,19 @@ public class Main {
 						RedirectStandardOutput = readProc,
 						RedirectStandardError = readProc,
 					};
-
-
 					var p = new Process() {
 						StartInfo = pi
 					};
-
 					Task.Run(() => {
 						p.Start();
 						if(readProc) {
-							ProcessStarted(p);
+							ReadProc(p);
 						}
 					});
-
-				}
-				,
+				},
 				_ => null
 			};
 		});
-
 		var termBar = new Lazy<View>(() => {
 			var view = new FrameView("Term", new Border() { BorderStyle = BorderStyle.Single, Effect3D = false, DrawMarginFrame = true }) {
 				X = 0,
@@ -136,37 +137,12 @@ public class Main {
 			InitTree([view, term]);
 			return view;
 		}).Value;
-
-		var homeView = new HomeTab().root;
+		var homeSession = new HomeSession();
 		//Add context button to switch to Find with root at dir
 		//Add button to treat dir as root
 		//Add option for treeview
-
-		var mainTabs = new Tabs(this).root;
-		var fileView = new FileTab(this).root;
-		var findView = new FindTab(this).root;
-		var editView = new Lazy<View>(() => {
-			var view = new View() {
-				X = 0,
-				Y = 0,
-				Width = Dim.Fill(),
-				Height = Dim.Fill()
-			};
-			var addressBar = new TextField("FILE") {
-				X = 0,
-				Y = 0,
-				Width = Dim.Fill(),
-				Height = 1
-			};
-			var textView = new TextView() {
-				X = 0,
-				Y = 2,
-				Width = Dim.Fill(),
-				Height = Dim.Fill()
-			};
-			InitTree([view, addressBar, textView]);
-			return view;
-		}).Value;
+		tabs = new Tabs(this).root;
+		exploreSession = new ExploreSession(this);
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
 		var termView = new Lazy<View>(() => {
@@ -183,11 +159,8 @@ public class Main {
 			InitTree([view, text]);
 			return view;
 		}).Value;
+		new List<ITab>([homeSession, exploreSession]).ForEach(s => AddTab(s.GetTab()));
 
-		ForTuple(AddTab, [
-				("Home", homeView),
-			("File", fileView)
-			]);
 		var window = new Window() {
 			X = 0,
 			Y = 0,
@@ -198,7 +171,7 @@ public class Main {
 		};
 
 		InitTree([
-			[window, mainTabs, termBar]
+			[window, tabs, termBar]
 		]);
 		var windowMenuBar = new MenuBar() {
 			Visible = true,
@@ -297,9 +270,34 @@ public interface IProp {
 	string id { get; }
 	string desc { get; }
 }
-public record Prop (string id, string desc) : IProp;
-public record Prop<T>(string id, string desc, T data) : IProp;
-public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) {
+
+public static class Props {
+	public static IProp
+		IS_LOCKED = new Prop("locked", "Locked"),
+		IS_DIRECTORY = new Prop("directory", "Directory"),
+		IS_STAGED = new Prop("gitStagedChanges", "Staged Changes"),
+		IS_UNSTAGED = new Prop("gitUnstagedChanges", "Unstaged Changes"),
+		IS_SOLUTION = new Prop("visualStudioSolution", "Visual Studio Solution"),
+		IS_REPOSITORY = new Prop("gitRepository", "Git Repository"),
+		IS_ZIP = new Prop("zipArchive", "Zip Archive");
+	public static IPropGen
+		IS_LINK_TO = new PropGen<string>("link", dest => $"Link To: {dest}"),
+		IN_REPOSITORY = new PropGen<Repository>("gitRepositoryItem", repo => $"In Repository: {repo.Info.Path}"),
+		IN_LIBRARY = new PropGen<Library>("libraryItem", library => $"In Library: {library.name}"),
+		IN_SOLUTION = new PropGen<string>("solutionItem", solutionPath => $"In Solution: {solutionPath}"),
+		IN_ZIP = new PropGen<string>("zipItem", zipRoot => $"In Zip: {zipRoot}");
+		
+}
+public record Prop (string id, string desc) : IProp {
+}
+public record Prop<T>(string id, string desc, T data) : IProp {
+
+}
+
+public interface IPropGen {
+	string id { get; }
+}
+public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
 	public delegate string GetDesc (T args);
 	public Prop<T> Generate (T args) => new Prop<T>(id, getDesc(args), args);
 }
@@ -417,8 +415,8 @@ public record Fx {
 					f.Copy(this, o);
 				}
 				lastIndex = new(lastIndex);
-			} catch {
 			} finally {
+
 			}
 		}
 	}

@@ -7,14 +7,15 @@ using System.Threading.Tasks;
 using Terminal.Gui;
 
 namespace fx;
-public class FindTab {
-
+public class FindSession : ITab {
+	public string TabName => "Find";
+	public View TabView => root;
 	public FindFilter filter = new FindFilter(null, null, null);
 	public View root;
 	public TreeView<IFind> tree;
 	public TextField rootBar;
 	private Ctx ctx;
-	public FindTab (Main main) {
+	public FindSession (Main main) {
 		ctx = main.ctx;
 		Fx fx = ctx.fx;
 		root = new View() {
