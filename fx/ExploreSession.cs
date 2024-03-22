@@ -14,6 +14,8 @@ using System.Collections;
 using System.Reflection;
 using static Ctx;
 using System.Threading;
+using Microsoft.Build.Construction;
+using System.Reflection.Metadata.Ecma335;
 namespace fx;
 public class ExploreSession : ITab {
 	public string TabName => "Explore";
@@ -24,9 +26,16 @@ public class ExploreSession : ITab {
 	private Ctx ctx;
 	private Fx fx => ctx.fx;
 
+	//Persistent inbetween visits
 	//Dictionary<string, PathItem> pathData = new();
-	Dictionary<string, GitItem> map = new();
+	
+	/// <summary>Temporary</summary>		 
 	private List<PathItem> cwdData = new();
+
+	/// <summary>Temporary</summary>
+	Dictionary<string, GitItem> gitMap = new();
+	
+	/// <summary>Temporary</summary>		
 	private List<GitItem> gitData = new();
 
 	private Button goPrev, goNext, goLeft;
@@ -288,22 +297,7 @@ public class ExploreSession : ITab {
 						,
 						'"' => () => {
 							if(!GetItem(out var p) || p.dir) return;
-							var initial = File.ReadAllText(p.path);
-							var d = new Dialog("Preview", []) {
-								Border = { Effect3D = false }
-							};
-							d.AddKeyPress(e => e.KeyEvent.Key switch {
-								Key.Enter => d.RequestStop
-							});
-							d.Add(new TextView() {
-								X = 0,
-								Y = 0,
-								Width = Dim.Fill(),
-								Height = Dim.Fill(),
-								Text = initial,
-								ReadOnly = true,
-							});
-							Application.Run(d);
+							Preview($"Preview: {p.path}", File.ReadAllText(p.path));
 						}
 						,
 						'?' => () => {
@@ -519,17 +513,29 @@ public class ExploreSession : ITab {
 						goto Done;
 					}
 					if(item.GetProp<(Repository repo, string local)>(Props.IN_REPOSITORY, out var pair)) {
+						var (repo, local) = pair;
+
+						IEnumerable<string> Paths () {
+							yield return local;
+						}
+
+						var diff = new MenuItem("Diff", "", () => {
+							var patch = repo.Diff.Compare<Patch>(Paths());
+							Preview($"Diff: {item.path}", patch.Content);
+						});
+
 						if(item.HasProp(Props.IS_UNSTAGED)) {
 							yield return new MenuItem("Stage", "", () => {
-								Commands.Stage(pair.repo, pair.local);
+								Commands.Stage(repo, local);
 								RefreshCwd();
 							});
+							yield return diff;
 						} else if(item.HasProp(Props.IS_STAGED)) {
-							var repoLocal = ctx.git.GetRepoLocal(item.path);
 							yield return new MenuItem("Unstage", "", () => {
-								Commands.Unstage(pair.repo, pair.local);
+								Commands.Unstage(repo, local);
 								RefreshCwd();
 							});
+							yield return diff;
 						}
 					}
 					Done:
@@ -545,14 +551,7 @@ public class ExploreSession : ITab {
 				c.Show();
 				return c;
 			}
-			bool GetItem (out PathItem p) {
-				p = null;
-				if(pathList.SelectedItem >= cwdData.Count) {
-					return false;
-				}
-				p = cwdData[pathList.SelectedItem];
-				return true;
-			}
+			
 			bool GetIndex (out int i) =>
 				(i = Math.Min(cwdData.Count - 1, pathList.SelectedItem)) != -1;
 			
@@ -680,7 +679,7 @@ public class ExploreSession : ITab {
 				yield return ((PropGen<(Repository repo, string local)>)Props.IN_REPOSITORY).Generate((ctx.git.repo, ctx.git.GetRepoLocal(path)));
 			}
 		}
-		if(map.TryGetValue(path, out var p)) {
+		if(gitMap.TryGetValue(path, out var p)) {
 			if(p.staged) {
 				yield return Props.IS_STAGED;
 			} else {
@@ -811,11 +810,36 @@ public class ExploreSession : ITab {
 			}
 		}
 		var items = GetItems().ToList();
-		map = items.ToDictionary(item => item.path);
+		gitMap = items.ToDictionary(item => item.path);
 		gitData = items;
 		gitList.SetSource(gitData);
 		foreach(var (i, it) in gitData.Index()) {
 			gitList.Source.SetMark(i, it.staged);
 		}
+	}
+	bool GetItem (out PathItem p) {
+		p = null;
+		if(pathList.SelectedItem >= cwdData.Count) {
+			return false;
+		}
+		p = cwdData[pathList.SelectedItem];
+		return true;
+	}
+	public void Preview (string title, string content) {
+		var d = new Dialog(title, []) {
+			Border = { Effect3D = false }
+		};
+		d.AddKeyPress(e => e.KeyEvent.Key switch {
+			Key.Enter => d.RequestStop
+		});
+		d.Add(new TextView() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(),
+			Text = content,
+			ReadOnly = true,
+		});
+		Application.Run(d);
 	}
 }

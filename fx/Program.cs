@@ -378,7 +378,6 @@ public record PathItem (string local, string path, HashSet<IProp> propertySet = 
 	public readonly Dictionary<string, IProp> propertyDict =
 		(propertySet ?? new())
 		.ToDictionary(p => p.id, p => p);
-
 	public bool HasProp (IProp p) => propertySet.Contains(p);
 	public bool HasProp (IPropGen p) => propertyDict.ContainsKey(p.id);
 	public bool HasProp<T> (IPropGen p, T data) where T:notnull => propertyDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
@@ -391,14 +390,12 @@ public record PathItem (string local, string path, HashSet<IProp> propertySet = 
 		return b;
 	}
 	public T GetProp<T> (IPropGen p) => ((Prop<T>)propertyDict[p.id]).data;
-
-	public bool dir => propertyDict.ContainsKey("directory");
-	public bool isLocked => propertyDict.ContainsKey("locked");
-
+	public bool dir => HasProp(Props.IS_DIRECTORY);
+	public bool isLocked => HasProp(Props.IS_LOCKED);
 	//public string type => dir ? "📁" : "📄";
 	//public string locked => restricted ? "🔒" : " ";
 	public string tag => $"{local}{(dir ? "/" : " ")}";
-	public string str => $"{tag,-24}{(isLocked ? "X" : " ")}";
+	public string str => $"{tag,-24}{(isLocked ? "[~]" : "   ")}";
 	public override string ToString () => str;
 }
 public record GitItem (string local, string path, bool staged) {
@@ -447,10 +444,11 @@ public record Fx {
 public record Ctx {
 	public const string USER_PROFILE_MASK = "%USERPROFILE%";
 	public string USER_PROFILE { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-	public Git git;
-	public Command[] Commands { get; private set; }
 	private Deserializer de { get; } = new Deserializer();
 	private Serializer se { get; } = new Serializer();
+	public Command[] Commands { get; private set; }
+	public Git git;
+	public Sln sln;
 
 	public Fx fx = new();
 	public Ctx () {
@@ -482,6 +480,12 @@ public record Ctx {
 			patch = repo.Diff.Compare<Patch>();
 		}
 		public string GetRepoLocal (string path) => path.Replace(root + Path.DirectorySeparatorChar, null);
+	}
+	public record Sln {
+		public string root;
+		public Sln (string path) {
+			root = Path.GetDirectoryName(path);
+		}
 	}
 }
 public record Config (Dictionary<string, string> programs = null, Command[] commands = null) {
