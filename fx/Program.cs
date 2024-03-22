@@ -40,17 +40,21 @@ var Prop = new {
 var userprofileAlias = "%USERPROFILE%";
 var userprofile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 var cwd = Environment.CurrentDirectory;
-var locked = new HashSet<string>();
-var lastIndex = new Dictionary<string, int>();
 var cwdPrev = new Stack<string>();
 var cwdNext = new Stack<string>();
+var locked = new HashSet<string>();
+var lastIndex = new Dictionary<string, int>();
+var pinsData = new List<string>();
+
 (string root, Repository repo, Patch patch) git = default;
-var g = (cwdPrev, cwdNext);
+
 string save = "fx.state.yaml";
 void Save () {
 	File.WriteAllText(save, new Serializer().Serialize(new State() {
 		cwd = cwd,
-		locked = locked.Select(r => r.Replace(cwd, "%CWD%")).ToHashSet(),
+		cwdPrev = cwdPrev,
+		cwdNext = cwdNext,
+		locked = locked,
 		lastIndex = lastIndex
 	}).Replace(userprofile, userprofileAlias));
 }
@@ -60,9 +64,8 @@ File.Delete(save);
 void Load () {
 	if(File.Exists(save)) {
 		try {
-			(cwd, locked, lastIndex) = new Deserializer().Deserialize<State>(File.ReadAllText(save).Replace(userprofileAlias, userprofile));
+			(cwd, cwdPrev, cwdNext, locked, lastIndex) = new Deserializer().Deserialize<State>(File.ReadAllText(save).Replace(userprofileAlias, userprofile));
 			//File.Delete(save);
-			locked = new(locked.Select(s => s.Replace("%CWD%", cwd)));
 			lastIndex = new(lastIndex);
 			//Debug.Assert(lastIndex != null);
 		} catch(Exception e) {
@@ -78,6 +81,7 @@ void InitCommands () {
 	var d = new Deserializer();
 	var programs = d.Deserialize<Dictionary<string, string>>(File.ReadAllText("Programs.yaml"));
 
+	Directory.CreateDirectory("Programs");
 	foreach((var name, var path) in programs) {
 		File.WriteAllText($"Programs/{name}", path);
 	}
@@ -279,34 +283,42 @@ View[] Create () {
 				Disabled = new(Color.Red, Color.Black)
 			}
 		};
-		var clipPane = new FrameView("Clipboard", new() { BorderStyle = BorderStyle.Single, DrawMarginFrame = true, Effect3D = false }) {
-			X = 0,
-			Y = Pos.Percent(50),
-			Width = Dim.Percent(25),
-			Height = Dim.Percent(50),
-		};
-		var clipTab = new TabView() {
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill()
-		};
-		/*
-		var clipCutList = new ListView() {
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill()
-		};
-		var clipHistList = new ListView() {
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill()
-		};
-		clipTab.AddTab(new("Cut", clipCutList), false);
-		clipTab.AddTab(new("History", clipHistList), false);
-		*/
+		var clipPane = new Lazy<View>(() => {
+			var view = new FrameView("Clipboard", new() { BorderStyle = BorderStyle.Single, DrawMarginFrame = true, Effect3D = false }) {
+				X = 0,
+				Y = Pos.Percent(50),
+				Width = Dim.Percent(25),
+				Height = Dim.Percent(50),
+			};
+			var clipTab = new Lazy<View>(() => {
+				var view = new TabView() {
+					X = 0,
+					Y = 0,
+					Width = Dim.Fill(),
+					Height = Dim.Fill()
+				};
+				var clipCutList = new ListView() {
+					X = 0,
+					Y = 0,
+					Width = Dim.Fill(),
+					Height = Dim.Fill()
+				};
+				var clipHistList = new ListView() {
+					X = 0,
+					Y = 0,
+					Width = Dim.Fill(),
+					Height = Dim.Fill()
+				};
+				ForTuple((string name, View v) => view.AddTab(new TabView.Tab(name, v), false), [
+					("Cut", clipCutList),
+				("History", clipHistList)
+					]);
+				return view;
+			}).Value;
+			InitTree([view, clipTab]);
+			return view;
+		}).Value;
+
 		var pathPane = new FrameView("Directory") {
 			X = Pos.Percent(25),
 			Y = 1,
@@ -425,7 +437,6 @@ View[] Create () {
 				},
 				_ => null
 			});
-
 			pathList.OpenSelectedItem += e => GoItem();
 			pathList.AddKeyPress(e => {
 				if(!pathList.HasFocus) return null;
@@ -1144,8 +1155,6 @@ View[] Create () {
 		};
 		rootShowButton.Clicked += FindDirs;
 		filterShowButton.Clicked += FindFiles;
-		string GetRoot() =>
-			rootBar.Text.ToString().Replace(userprofileAlias, userprofile);
 		void FindDirs () {
 			filter = filter with {
 				filePattern = null,
@@ -1160,7 +1169,6 @@ View[] Create () {
 			};
 			SetFilter(filter);
 		}
-		findAllButton.Clicked += FindLines;
 		void FindLines() {
 			filter = filter with {
 				filePattern = new(filterBar.Text.ToString()),
@@ -1170,9 +1178,21 @@ View[] Create () {
 		}
 		void SetFilter(FindFilter filter) {
 			tree.ClearObjects();
-			tree.AddObject(new FindDir(filter, GetRoot()));
+
+
+			var root = GetRoot();
+			
+			tree.AddObject(
+				Directory.Exists(root) ?
+					new FindDir(filter, root) :
+					new FindFile(filter, root)
+					);
 			//tree.ExpandAll();
 		}
+		string GetRoot () =>
+			rootBar.Text.ToString().Replace(userprofileAlias, userprofile);
+
+		findAllButton.Clicked += FindLines;
 		//Print button (no replace)
 		FindLines();
 		InitTree([view,
@@ -1189,7 +1209,8 @@ View[] Create () {
 				mainTabs.AddTab(new TabView.Tab("Find", view), true);
 			}
 			rootBar.Text = path;
-			
+			FindDirs();
+			tree.ExpandAll();
 		};
 		return view;
 	}).Value;
@@ -1503,7 +1524,14 @@ public record Library(string name) {
 	public List<Link> links = new();
 	public record Link(string path, bool visible, bool expand);
 }
-public record State(string cwd = null, HashSet<string> locked = null, Dictionary<string, int> lastIndex = null) {
+public record State(
+	string cwd = null,
+	Stack<string> cwdPrev = null,
+	Stack<string> cwdNext = null,
+	HashSet<string> locked = null, 
+	Dictionary<string, int> lastIndex = null
+	
+	) {
 	public State () : this(null, null, null) { }
 }
 public record Config (Dictionary<string, string> programs = null, Command[] commands = null) {
@@ -1547,4 +1575,6 @@ public static class SEnumerable {
 			yield return (U)con.Invoke([item]);
 		}
 	}
+	public static IEnumerable<string> Replace (this IEnumerable<string> ie, string from, string to) =>
+		ie.Select(s => s.Replace(from, to));
 }

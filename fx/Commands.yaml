@@ -41,5 +41,5 @@
       - ext: xml
       - ext: json
       - ext: txt
-      - ext: .gitignore
+      - ext: gitignore
       - pattern: .*
