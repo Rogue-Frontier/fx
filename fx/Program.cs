@@ -21,6 +21,7 @@ using System.IO;
 using System.IO.Compression;
 using IWshRuntimeLibrary;
 using File = System.IO.File;
+
 var Prop = new {
 	IS_LOCKED =		new Prop("locked",					"Locked"),
 	IS_DIRECTORY =	new Prop("directory",				"Directory"),
@@ -36,35 +37,20 @@ var Prop = new {
 	IN_SOLUTION =	new Prop<string>.Gen("solutionItem", solutionPath => $"In Solution: {solutionPath}"),
 	IN_ZIP =		new Prop<string>.Gen("zipItem", zipRoot => $"In Zip: {zipRoot}"),
 };
-
 var userprofileAlias = "%USERPROFILE%";
 var userprofile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-
 var cwd = Environment.CurrentDirectory;
 var locked = new HashSet<string>();
 var lastIndex = new Dictionary<string, int>();
 var cwdPrev = new Stack<string>();
 var cwdNext = new Stack<string>();
 (string root, Repository repo, Patch patch) git = default;
-
-
 var g = (cwdPrev, cwdNext);
-
-var h = g with {
-	cwdNext = null
-};
-var j = new {
-	a = 5
-};
-var l = j with {
-	a = 2
-};
-
 string save = "fx.state.yaml";
 void Save () {
 	File.WriteAllText(save, new Serializer().Serialize(new State() {
 		cwd = cwd,
-		restricted= locked.Select(r => r.Replace(cwd, "%CWD%")).ToHashSet(),
+		locked = locked.Select(r => r.Replace(cwd, "%CWD%")).ToHashSet(),
 		lastIndex = lastIndex
 	}).Replace(userprofile, userprofileAlias));
 }
@@ -75,26 +61,28 @@ void Load () {
 	if(File.Exists(save)) {
 		try {
 			(cwd, locked, lastIndex) = new Deserializer().Deserialize<State>(File.ReadAllText(save).Replace(userprofileAlias, userprofile));
-
 			//File.Delete(save);
-
 			locked = new(locked.Select(s => s.Replace("%CWD%", cwd)));
 			lastIndex = new(lastIndex);
 			//Debug.Assert(lastIndex != null);
 		} catch(Exception e) {
 		} finally {
-
 		}
 	}
 }
 AppDomain.CurrentDomain.ProcessExit += (a, e) => {
 	Save();
 };
-Command[] commands;
+Command[] commands = [];
 void InitCommands () {
-	var bindings = Path.GetFullPath("Bindings.xml");
-	
-	commands = [.. XElement.Load(bindings).Elements().Select(Command.Parse)];
+	var d = new Deserializer();
+	var programs = d.Deserialize<Dictionary<string, string>>(File.ReadAllText("Programs.yaml"));
+
+	foreach((var name, var path) in programs) {
+		File.WriteAllText($"Programs/{name}", path);
+	}
+	commands = d.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
+	//commands = [.. XElement.Load(bindings).Elements().Select(Command.Parse)];
 #if false
 	Console.WriteLine(bindings);
 	foreach(var item in commands) {
@@ -104,7 +92,6 @@ void InitCommands () {
 #endif
 }
 InitCommands();
-
 Application.Init();
 try {
 	Load();
@@ -125,9 +112,11 @@ View[] Create () {
 	var gitData = new List<GitItem>();
 
 	bool readProcess = false;
-	Action<Process>? ProcessStarted = default;
 
-	Action<FindLine> EditFile = default;
+	var ProcessStarted = delegate (Process proc) { };
+	var EditFile = delegate (FindLine line) { };
+	var FindIn = delegate (string path) { };
+	var AddTab = delegate (string name, View view) { };
 
 	var term = new TextField() {
 		X = 0,
@@ -232,6 +221,28 @@ View[] Create () {
 	//Add context button to switch to Find with root at dir
 	//Add button to treat dir as root
 	//Add option for treeview
+
+	var mainTabs = new Lazy<TabView>(() => {
+		var tv = new TabView() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(3),
+			Border = new() { Effect3D = false, DrawMarginFrame = false, BorderStyle = BorderStyle.None }
+		};
+
+		AddTab = (name, view) => tv.AddTab(new TabView.Tab(name, view), false);
+
+		/*
+		tv.AddTab(new TabView.Tab("File", fileView), false);
+		tv.AddTab(new TabView.Tab("Term", termView), false);
+		*/
+		tv.SelectedTabChanged += (a, e) => {
+			readProcess = e.NewTab.Text == "Term";
+		};
+
+		return tv;
+	}).Value;
 	var fileView = new Lazy<View>(() => {
 		var fileView = new View() {
 			X = 0,
@@ -403,6 +414,18 @@ View[] Create () {
 				MouseFlags.Button1Clicked => () => e.Handled = GoLeft(),
 				_ => null
 			});
+			pathList.AddMouseClick(e => e.MouseEvent.Flags switch {
+				MouseFlags.Button3Clicked => () => {
+					var prev = pathList.SelectedItem;
+					var i = pathList.TopItem + e.MouseEvent.Y;
+					if(i >= cwdData.Count) {
+						return;
+					}
+					var c = ShowContext(cwdData[i].path);
+				},
+				_ => null
+			});
+
 			pathList.OpenSelectedItem += e => GoItem();
 			pathList.AddKeyPress(e => {
 				if(!pathList.HasFocus) return null;
@@ -630,9 +653,16 @@ View[] Create () {
 
 				Application.Run(d);
 			}
-			void ShowContext (string path) {
+			ContextMenu ShowContext (string path) {
 				IEnumerable<MenuItem> GetCommon () {
-					yield return new MenuItem("Properties", "", () => { });
+
+					yield return new MenuItem(Path.GetFileName(path), null, null, () => false);
+					yield return new MenuItem("----", null, null, () => false);
+					yield return new MenuItem("Properties", null, () => { });
+
+					yield return new MenuItem("Find", null, () => {
+						FindIn(path);
+					});
 					if(Directory.Exists(path)) {
 						yield return new MenuItem("Remember", "", () => cwdRecall = path);
 						yield return new MenuItem("Open in Explorer", "", () => Run($"explorer.exe {path}"));
@@ -747,8 +777,10 @@ View[] Create () {
 					}
 				}
 
-				var c = new ContextMenu(pathList.Bounds.X, pathList.Bounds.Y, new([.. GetCommon()])) { };
+				var c = new ContextMenu(pathList, new(Path.GetFileName(path),
+					[.. GetCommon()]));
 				c.Show();
+				return c;
 			}
 			bool GetItem (out PathItem p) {
 				p = null;
@@ -855,11 +887,12 @@ View[] Create () {
 		void InitCwd () {
 			SetCwd(cwd);
 		}
-		void UpdateButtons () {
-			foreach(var (b, st) in new[] { (goLeft, Up()), (goNext, cwdNext), (goPrev, cwdPrev) }) {
-				b.Enabled = st.Any();
-			}
-		}
+		void UpdateButtons () =>
+			ForTuple((Button button, IEnumerable<string> items) => {
+				button.Enabled = items.Any();
+			}, [
+				(goLeft, Up()), (goNext, cwdNext), (goPrev, cwdPrev)
+			]);
 		void UpdateProcesses () {
 			procData.Clear();
 			procData.AddRange(Process.GetProcesses().Where(p => p.MainWindowHandle != 0).Select(p => new ProcItem(p)));
@@ -1009,7 +1042,7 @@ View[] Create () {
 		var finder = new TreeFinder();
 		int w = 8;
 		int y = 0;
-		var rootLabel = new Label("Root") {
+		var rootLabel = new Label("Dir") {
 			X = 0,
 			Y = y,
 			Width = w
@@ -1019,7 +1052,7 @@ View[] Create () {
 			Y = y,
 			Width = Dim.Fill(24),
 		};
-		var rootShowButton = new Button("Find Directories", false) {
+		var rootShowButton = new Button("All", false) {
 			X = Pos.Right(rootBar),
 			Y = y,
 			Width = 6
@@ -1035,13 +1068,13 @@ View[] Create () {
 			Y = y,
 			Width = Dim.Fill(24),
 		};
-		var filterShowButton = new Button("Find Files", false) {
+		var filterShowButton = new Button("All", false) {
 			X = Pos.Right(filterBar),
 			Y = y,
 			Width = 6
 		};
 		y++;
-		var findLabel = new Label("Find") {
+		var findLabel = new Label("Text") {
 			X = 0,
 			Y = y,
 			Width = w
@@ -1149,6 +1182,15 @@ View[] Create () {
 			replaceLabel, replaceBar, replaceAllButton, replacePrevButton, replaceNextButton,
 			tree
 			]);
+		FindIn = path => {
+			if(mainTabs.Tabs.FirstOrDefault(tab => tab.View == view) is { } t) {
+				mainTabs.SelectedTab = t;
+			} else {
+				mainTabs.AddTab(new TabView.Tab("Find", view), true);
+			}
+			rootBar.Text = path;
+			
+		};
 		return view;
 	}).Value;
 	var editView = new Lazy<View>(() => {
@@ -1177,8 +1219,6 @@ View[] Create () {
 	//https://github.com/gui-cs/Terminal.Gui/issues/1404
 	var termView = new Lazy<View>(() => {
 		var view = new View();
-
-
 		var text = new TextView() {
 			X = 0,
 			Y = 0,
@@ -1205,26 +1245,13 @@ View[] Create () {
 		InitTree([view, text]);
 		return view;
 	}).Value;
-	var mainTabs = new Lazy<TabView>(() => {
-		var tv = new TabView() {
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill(3),
-			Border = new() { Effect3D = false, DrawMarginFrame = false, BorderStyle = BorderStyle.None}
-		};
-		foreach(var(name, view) in new[] { ("Home", homeView), ("File", fileView), ("Find", findView), ("Edit", editView), ("Term", termView), ("Git", null) }) {
-			tv.AddTab(new TabView.Tab(name, view), false);
-		}
-		/*
-		tv.AddTab(new TabView.Tab("File", fileView), false);
-		tv.AddTab(new TabView.Tab("Term", termView), false);
-		*/
-		tv.SelectedTabChanged += (a, e) => {
-			readProcess = e.NewTab.View == termView;
-		};
-		return tv;
-	}).Value;
+	
+	ForTuple(AddTab, [
+			("Home", homeView),
+			("File", fileView)
+		]);
+
+
 	var window = new Window() {
 		X = 0,
 		Y = 0,
@@ -1252,6 +1279,15 @@ View[] Create () {
 	void InitTree (params View[][] tree) {
 		foreach(var row in tree) {
 			row[0].Add(row[1..]);
+		}
+	}
+	void ForTuple<T, U>(T action, params U[] arr) where T:Delegate {
+		
+		var fields = typeof(U).GetFields();
+		Type[] pars = [..fields.Select(field => field.GetType())];
+		foreach(var row in arr) {
+			object[] args = [.. fields.Select(field => field.GetValue(row))];
+			action.DynamicInvoke(args);
 		}
 	}
 }
@@ -1368,56 +1404,48 @@ public record Prop<T>(string id, string desc, T data) : IProp {
 		public Prop<T> Generate (T args) => new Prop<T>(id, getDesc(args), args);
 	}
 }
-public record Command(string name, string exe, ITarget[] targets) {
-	public static Command Parse(XElement e) {
-		var name = e.A("name");
-		var cmd = "";
-			cmd =
-				e.TA("fmt", out cmd) ?
-					$@"""{cmd}""" :
-				e.TA("xref", out cmd) ?
-					@$"""{Path.GetFullPath(File.ReadAllText(cmd))}"" {{0}}" :
-					throw new Exception();
-		return new Command(name, cmd, [..e.Element("Target").Elements().Select(e => (ITarget)(e.Name.LocalName switch {
-			"Dir" => TargetDir.Parse(e),
-			"File" => TargetFile.Parse(e),
-			_ => throw new Exception()
-		}))]);
-	}
-	public bool Accept(string path) =>
-		targets.Any(t => t.Accept(path));
+public record Command() {
+	public string name;
+	public string exe;
+	public TargetAny targetAny;
+	public string fmt { set => exe = @$"""{value}"""; }
+	public string program { set => exe = @$"""{File.ReadAllText($"Programs/{value}")}"" {{0}}"; }
+
+	public bool Accept (string path) => targetAny.Accept(path);
 	public string GetCmd (string target) => string.Format(exe, target);
 }
 public interface ITarget {
 	public bool Accept(string path);
 }
-public record TargetFile([StringSyntax("Regex")] string pattern = ".+") : ITarget {
-	public static TargetFile Parse(XElement e) {
-		return new(e.TA("pattern") ?? $"[^\\.]*\\.{e.TA("ext")}$");
-	}
+public record TargetAny() : ITarget {
+	public TargetDir[] dir = [];
+	public TargetFile[] file = [];
+	public bool Accept (string path) =>
+		Directory.Exists(path) ?
+			dir.Any(d => d.Accept(path)) :
+			file.Any(f => f.Accept(path));
+}
+public record TargetFile() : ITarget {
+
+	[StringSyntax("Regex")]
+	
+	public string pattern = ".+";
+	public string ext { set => pattern = $"[^\\.]*\\.{value}$"; }
 	public bool Accept (string path) {
 		return !Conditions().Contains(false);
 		IEnumerable<bool> Conditions () {
 			yield return File.Exists(path);
-			var f = Path.GetFileName(path);
-			var b = Regex.IsMatch(f, pattern);
-			yield return b;
+			yield return Regex.IsMatch(Path.GetFileName(path), pattern);
 		}
 	}
 }
-public record TargetDir([StringSyntax("Regex")]string pattern = ".+") : ITarget {
-	public TargetFile[] subFile = [];
-	public TargetDir[] subDir = [];
-	public static TargetDir Parse(XElement e) {
-		return new(
-			e.TA("name") is { }s ?
-				Regex.Escape(s) :
-				e.TA(nameof(pattern)) ??
-				".+") {
-			subDir = [.. e.Elements("Dir").Select(TargetDir.Parse)],
-			subFile = [.. e.Elements("File").Select(TargetFile.Parse)]
-		};
-	}
+public record TargetDir() : ITarget {
+	[StringSyntax("Regex")]
+	public string pattern = ".+";
+
+	public string name { set => pattern = Regex.Escape(value); }
+	public TargetFile[] file = [];
+	public TargetDir[] dir = [];
 	public bool Accept (string path) {
 		return !Conditions().Contains(false);
 		IEnumerable<bool> Conditions () {
@@ -1425,10 +1453,10 @@ public record TargetDir([StringSyntax("Regex")]string pattern = ".+") : ITarget 
 			yield return Regex.IsMatch(Path.GetFileName(path), pattern);
 
 			var d = Directory.GetDirectories(path);
-			yield return subDir.All(s => d.Any(s.Accept));
+			yield return dir.All(s => d.Any(s.Accept));
 			
 			var f = Directory.GetFiles(path);
-			yield return subFile.All(s => f.Any(s.Accept));
+			yield return file.All(s => f.Any(s.Accept));
 		}
 	}
 }
@@ -1475,8 +1503,11 @@ public record Library(string name) {
 	public List<Link> links = new();
 	public record Link(string path, bool visible, bool expand);
 }
-public record State (string cwd, HashSet<string> restricted, Dictionary<string, int> lastIndex) {
+public record State(string cwd = null, HashSet<string> locked = null, Dictionary<string, int> lastIndex = null) {
 	public State () : this(null, null, null) { }
+}
+public record Config (Dictionary<string, string> programs = null, Command[] commands = null) {
+	public Config () : this(null, null) { }
 }
 public static class SView {
 	public static void AddKeyPress (this View v, KeyEvent f) {
@@ -1508,7 +1539,6 @@ public static class SView {
 }
 public delegate Action? KeyEvent (View.KeyEventEventArgs e);
 public delegate Action? MouseEvent (View.MouseEventArgs e);
-
 public static class SEnumerable {
 	public static IEnumerable<U> Construct<T, U>(IEnumerable<T> seq) {
 		var con = typeof(U).GetConstructor([typeof(T)]);

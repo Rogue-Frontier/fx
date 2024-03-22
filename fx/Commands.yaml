@@ -1,0 +1,45 @@
+---
+- name: Open GitHub
+  fmt: gh repo view --web
+  targetAny:
+    dir:
+      - dir:
+        - name: .git
+        - name: .github
+- name: Run C# Project
+  fmt: dotnet run --project {0}
+  targetAny:
+    dir:
+      - file:
+          - ext: csproj
+    file:
+      - ext: csproj
+- name: Public C# Project
+  fmt: dotnet publish --project {0}
+  targetAny:
+    dir:
+      - file:
+          - ext: csproj
+    file:
+      - ext: csproj
+- name: Open Solution in Visual Studio
+  targetAny:
+    dir:
+      - file:
+          - ext: sln
+    file:
+      - ext: sln
+- name: Run C# Script
+  program: cx
+  targetAny:
+    file:
+      - ext: cx
+- name: Open Notepad++
+  program: np
+  targetAny:
+    file:
+      - ext: xml
+      - ext: json
+      - ext: txt
+      - ext: .gitignore
+      - pattern: .*

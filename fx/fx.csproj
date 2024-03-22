@@ -26,15 +26,16 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Bindings.xml">
+    <None Update="Commands.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Programs\cx.x">
+    <None Update="Programs.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Programs\np.x">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Programs\" />
   </ItemGroup>
 
 </Project>

@@ -1,35 +1,4 @@
-# yaml-language-server: $schema=
 ---
-programs:
-  np: C:/Program Files/Notepad++/notepad++.exe
-  cx: ../../../../cx/bin/Debug/net9.0/cx.exe
-  vi: C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe
-commands:
-  - name: Open GitHub
-    fmt: gh repo view --web
-    target:
-      - !!dir
-        - 
-          name: .git
-        - name: .github
-  - name: Run C# Project
-    fmt: dotnet run --project {0}
-    target:
-      - :
-          - ext: csproj
-      - ext: csproj
-  - name: Public C# Project
-    fmt: dotnet publish --project {0}
-    target:
-      - :
-        - ext: csproj
-      - ext: csproj
-  - name: Open Solution in Visual Studio
-    target:
-      - :
-        - ext: sln
-      - ext: sln
-  - name: Run C# Script
-    xref: Programs/cx.x
-    target:
-      ext: cx
+np: C:/Program Files/Notepad++/notepad++.exe
+cx: ../../../../cx/bin/Debug/net9.0/cx.exe
+vi: C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe
