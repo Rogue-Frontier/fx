@@ -1,0 +1,4 @@
+---
+- name: Build ArchConsole
+  script: |
+    dotnet build %USERPROFILE%/source/repos/ArchConsole

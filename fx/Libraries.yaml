@@ -1,0 +1,6 @@
+---
+- name: Default
+  links:
+    - path: \%USERPROFILE%/Desktop
+      visible: true
+      

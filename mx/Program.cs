@@ -1,26 +1,49 @@
-﻿using MailKit.Security;
+﻿using Google.Apis.Auth.OAuth2;
+using Google.Apis.Auth.OAuth2.Flows;
+using Google.Apis.Util;
+using Google.Apis.Util.Store;
+using MailKit.Net.Imap;
+using MailKit.Search;
+using MailKit.Security;
 using MimeKit;
 
+const string GMailAccount = "alexmchen0@gmail.com";
 
-bool useSsl = true;
-var password = File.ReadAllText("%USERPROFILE/secret_gmail.txt");
-async Task<IEnumerable<MimeMessage>> GetMessagesAsync () {
-	using var imapClient = new MailKit.Net.Imap.ImapClient();
-	var secureSocketOptions = SecureSocketOptions.Auto;
-	if(useSsl) secureSocketOptions = SecureSocketOptions.SslOnConnect;
-	await imapClient.ConnectAsync(host, port, secureSocketOptions);
+var clientSecrets = new ClientSecrets {
+	ClientId = "40405526811-rql4l5dflr4nqu01u0olqtkipn59fmfg.apps.googleusercontent.com",
+	ClientSecret = "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"
+};
 
-	await imapClient.AuthenticateAsync(login, password);
+var codeFlow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer {
+	DataStore = new FileDataStore("CredentialCacheFolder", false),
+	Scopes = ["https://mail.google.com/"],
+	ClientSecrets = clientSecrets
+});
 
-	await imapClient.Inbox.OpenAsync(FolderAccess.ReadOnly);
+// Note: For a web app, you'll want to use AuthorizationCodeWebApp instead.
+var codeReceiver = new LocalServerCodeReceiver();
+var authCode = new AuthorizationCodeInstalledApp(codeFlow, codeReceiver);
 
-	var uids = await imapClient.Inbox.SearchAsync(SearchQuery.All);
+var credential = await authCode.AuthorizeAsync(GMailAccount, CancellationToken.None);
 
-	var messages = new List<MimeMessage>();
-	foreach(var uid in uids)
-		messages.Add(await imapClient.Inbox.GetMessageAsync(uid));
+if(credential.Token.IsExpired(SystemClock.Default))
+	await credential.RefreshTokenAsync(CancellationToken.None);
 
-	imapClient.Disconnect(true);
+var oauth2 = new SaslMechanismOAuth2(credential.UserId, credential.Token.AccessToken);
 
-	return messages;
-}
+	new Thread(() => {
+
+		var client = new ImapClient();
+		client.Connect("imap.gmail.com", 993, SecureSocketOptions.SslOnConnect);
+		client.Authenticate(oauth2);
+
+		client.Inbox.Open(MailKit.FolderAccess.ReadOnly);
+		foreach(var a in client.Inbox.Search(SearchOptions.All, SearchQuery.Not(SearchQuery.Seen)).UniqueIds) {
+			var msg = client.Inbox.GetMessage(a);
+			var from = msg.From.First() as MailboxAddress;
+			var subject = msg.Subject;
+			Console.WriteLine($"{from.Name, -32}{subject}");
+		}
+		client.Disconnect(true);
+		client.Dispose();
+	}).Start();

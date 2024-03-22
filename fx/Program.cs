@@ -676,7 +676,7 @@ View[] Create () {
 					});
 					if(Directory.Exists(path)) {
 						yield return new MenuItem("Remember", "", () => cwdRecall = path);
-						yield return new MenuItem("Open in Explorer", "", () => Run($"explorer.exe {path}"));
+						yield return new MenuItem("Open in Explorer", "", () => RunProc($"explorer.exe {path}"));
 						yield return new MenuItem("New File", "", () => {
 
 							var create = new Button("Create") { Enabled = false };
@@ -784,7 +784,7 @@ View[] Create () {
 					yield return new("Copy Path", "", () => { Clipboard.TrySetClipboardData(path); });
 					foreach(var c in commands) {
 						if(c.Accept(path))
-							yield return new(c.name, "", () => Run(c.GetCmd(path)));
+							yield return new(c.name, "", () => RunProc(c.GetCmd(path)));
 					}
 				}
 
@@ -869,21 +869,22 @@ View[] Create () {
 						GoPath(i.path);
 						return;
 					}
-					Run(i.path);
+					RunProc(i.path);
 				}
 				
 			}
 			void RefreshCwd () {
 				SetCwd(cwd);
 			}
-			Process Run (string cmd) {
+			Process RunProc (string cmd) {
 				//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
-				var cmdArgs = @$"/c {cmd} & pause";
+				var cmdArgs = @$"/c {cmd}";
 				var pi = new ProcessStartInfo("cmd.exe") {
 					WorkingDirectory = cwd,
 					Arguments = $"{cmdArgs}",
 					UseShellExecute = true,
-					RedirectStandardOutput = false,
+					WindowStyle = ProcessWindowStyle.Hidden,
+					//CreateNoWindow = true,
 				};
 				var p = new Process() {
 					StartInfo = pi
