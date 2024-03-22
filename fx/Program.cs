@@ -19,7 +19,23 @@ using static SView;
 using Terminal.Gui.Trees;
 using System.IO;
 using System.IO.Compression;
+using IWshRuntimeLibrary;
+using File = System.IO.File;
+var Prop = new {
+	IS_LOCKED =		new Prop("locked",					"Locked"),
+	IS_DIRECTORY =	new Prop("directory",				"Directory"),
+	IS_STAGED =		new Prop("gitStagedChanges",		"Staged Changes"),
+	IS_UNSTAGED =	new Prop("gitUnstagedChanges",		"Unstaged Changes"),
+	IS_SOLUTION =	new Prop("visualStudioSolution",	"Visual Studio Solution"),
+	IS_REPOSITORY =	new Prop("gitRepository",			"Git Repository"),
+	IS_ZIP =		new Prop("zipArchive",				"Zip Archive"),
 
+	IS_LINK_TO =	new Prop<string>.Gen("link", dest => $"Link To: {dest}"),
+	IN_REPOSITORY =	new Prop<Repository>.Gen("gitRepositoryItem", repo => $"In Repository: {repo.Info.Path}"),
+	IN_LIBRARY =	new Prop<Library>.Gen("libraryItem", library => $"In Library: {library.name}"),
+	IN_SOLUTION =	new Prop<string>.Gen("solutionItem", solutionPath => $"In Solution: {solutionPath}"),
+	IN_ZIP =		new Prop<string>.Gen("zipItem", zipRoot => $"In Zip: {zipRoot}"),
+};
 
 var userprofileAlias = "%USERPROFILE%";
 var userprofile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -106,6 +122,8 @@ View[] Create () {
 	var cwdRecall = (string)null;
 	var procData = new List<ProcItem>();
 
+	var gitData = new List<GitItem>();
+
 	bool readProcess = false;
 	Action<Process>? ProcessStarted = default;
 
@@ -113,8 +131,8 @@ View[] Create () {
 
 	var term = new TextField() {
 		X = 0,
-		Y = Pos.AnchorEnd(1),
-		Width = Dim.Fill(0),
+		Y = 0,
+		Width = Dim.Fill(),
 		Height = 1,
 		DesiredCursorVisibility = CursorVisibility.Box,
 		ColorScheme = new() {
@@ -125,6 +143,95 @@ View[] Create () {
 			HotNormal = new(Color.Red, Color.Black),
 		},
 	};
+
+	var termBar = new Lazy<View>(() => {
+		var view = new FrameView("Term", new Border() { BorderStyle = BorderStyle.Single, Effect3D = false, DrawMarginFrame = true }) {
+			X = 0,
+			Y = Pos.AnchorEnd(3),
+			Width = Dim.Fill(),
+			Height = 3
+		};
+		InitTree([view, term]);
+		return view;
+	}).Value;
+
+	var homeView = new Lazy<View>(() => {
+
+		var view = new View() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(),
+		};
+		var FILL = Dim.Fill();
+		var w = Dim.Percent(25);
+		//Libraries
+		var libraries = new FrameView("Libraries") {
+			X = 0,
+			Y = 0,
+			Width = w,
+			Height = Dim.Fill(),
+		};
+		var librariesList = new ListView() {
+			X = 0,
+			Y = 0,
+			Width = FILL,
+			Height = FILL,
+		};
+
+		//Pinned folders, pinned files
+		var pins = new FrameView("Pinned") {
+			X = Pos.Right(libraries),
+			Y = 0,
+			Width = w,
+			Height = FILL,
+		};
+		var pinsList = new ListView() {
+			X=0,
+			Y=0,
+			Width=FILL,
+			Height=FILL
+		};
+		var recent = new FrameView("Recent") {
+			X = Pos.Right(pins),
+			Y = 0,
+			Width = w,
+			Height = Dim.Fill()
+		};
+		var recentList = new ListView() {
+			X = 0,
+			Y = 0,
+			Width = FILL,
+			Height = FILL
+		};
+
+
+		var repos = new FrameView("Repositories") {
+			X = Pos.Right(recent),
+			Y = 0,
+			Width = w,
+			Height = Dim.Fill()
+		};
+		var repoList = new ListView() {
+			X = 0,
+			Y = 0,
+			Width = FILL,
+			Height = FILL
+		};
+
+		InitTree(
+			[view, libraries, pins, recent, repos],
+			[libraries, librariesList],
+			[pins, pinsList],
+			[recent, recentList],
+			[repos, repoList]
+			);
+		return view;
+		//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
+	}).Value;
+	//Add context button to switch to Find with root at dir
+	//Add button to treat dir as root
+	//Add option for treeview
 	var fileView = new Lazy<View>(() => {
 		var fileView = new View() {
 			X = 0,
@@ -220,13 +327,36 @@ View[] Create () {
 			X = Pos.Percent(75),
 			Y = 1,
 			Width = Dim.Percent(25),
-			Height = Dim.Fill(1),
+			Height = Dim.Percent(50) - 1,
 		};
 		var procList = new ListView(procData) {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
+			ColorScheme = new() {
+				HotNormal = new(Color.Black, Color.White),
+				Normal = new(Color.White, Color.Blue),
+				HotFocus = new(Color.Black, Color.White),
+				Focus = new(Color.White, Color.Black),
+				Disabled = new(Color.Red, Color.Black)
+			}
+		};
+
+		var gitPane = new FrameView("Changes", new() { BorderStyle = BorderStyle.Single, DrawMarginFrame = true, Effect3D = false }) {
+			X = Pos.Percent(75),
+			Y = Pos.Percent(50),
+			Width = Dim.Percent(25),
+			Height = Dim.Percent(50),
+		};
+
+		var gitList = new ListView(gitData) {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(),
+			AllowsMarking = true,
+			AllowsMultipleSelection = true,
 			ColorScheme = new() {
 				HotNormal = new(Color.Black, Color.White),
 				Normal = new(Color.White, Color.Blue),
@@ -250,7 +380,8 @@ View[] Create () {
 				[clipPane],
 				[pathPane, pathList],
 				[procPane, procList],
-				[fileView, addressBar, goPrev, goNext, goLeft, freqPane, clipPane, pathPane, /*properties,*/ procPane]
+				[gitPane, gitList],
+				[fileView, addressBar, goPrev, goNext, goLeft, freqPane, clipPane, pathPane, /*properties,*/ procPane, gitPane]
 				);
 		}
 		void InitEvents () {
@@ -280,7 +411,7 @@ View[] Create () {
 					Key.CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
 					Key.Tab => () => {
 						if(!GetItem(out var p)) return;
-						term.Text = p.name;
+						term.Text = p.local;
 						term.SetFocus();
 					}
 					,
@@ -327,7 +458,12 @@ View[] Create () {
 						'"' => () => {
 							if(!GetItem(out var p) || p.dir) return;
 							var initial = File.ReadAllText(p.path);
-							var d = new Dialog("View", []);
+							var d = new Dialog("Preview", []) {
+								Border = {Effect3D=false}
+							};
+							d.AddKeyPress(e => e.KeyEvent.Key switch {
+								Key.Enter => d.RequestStop
+							});
 							d.Add(new TextView() {
 								X = 0,
 								Y = 0,
@@ -341,14 +477,7 @@ View[] Create () {
 						,
 						'?' => () => {
 							if(!GetItem(out var p)) return;
-							var d = new Dialog("Properties", []) {
-								Text = $"{p.name}"
-							};
-							d.KeyPress += e => {
-								e.Handled = true;
-								d.Running = false;
-							};
-							Application.Run(d);
+							ShowProperties(p);
 						}
 						,
 						'/' => () => {
@@ -387,16 +516,14 @@ View[] Create () {
 						>= 'a' and <= 'z' => () => {
 							var c = $"{(char)e.KeyEvent.KeyValue}";
 							var index = pathList.SelectedItem;
-
 							bool P ((int index, PathItem item) pair) =>
 								pair.index > index && StartsWith(pair);
 							bool StartsWith ((int index, PathItem item) pair) =>
-								pair.item.name.StartsWith(c, StringComparison.CurrentCultureIgnoreCase);
-
-							var pairs = cwdData.Select((item, index) => (index, item));
-							var dest = pairs.FirstOrDefault(P, pairs!.FirstOrDefault(StartsWith, (-1, null)));
-							if(dest.index == -1) return;
-							pathList.SelectedItem = dest.index;
+								pair.item.local.StartsWith(c, StringComparison.CurrentCultureIgnoreCase);
+							var pairs = cwdData.Index();
+							var dest = pairs.FirstOrDefault(P, pairs.FirstOrDefault(StartsWith, (-1, null)));
+							if(dest.Index == -1) return;
+							pathList.SelectedItem = dest.Index;
 							pathList.SetNeedsDisplay();
 						}
 						,
@@ -450,7 +577,7 @@ View[] Create () {
 						var cmd = $"{t}";
 						var pi = new ProcessStartInfo("cmd.exe") {
 							WorkingDirectory = cwd,
-							Arguments = @$"/c {cmd} & exit",
+							Arguments = @$"/c {cmd} & pause",
 							UseShellExecute = !readProcess,
 							RedirectStandardOutput = readProcess,
 							RedirectStandardError=readProcess,
@@ -483,6 +610,26 @@ View[] Create () {
 				_ => null
 			});
 			*/
+			void ShowProperties(PathItem path) {
+				var d = new Dialog("Properties", []) {
+					Border = {
+						Effect3D = false
+					}
+				};
+				d.KeyPress += e => {
+					e.Handled = true;
+					d.Running = false;
+				};
+
+				d.Add(new TextView() {
+					X=0,Y=0,
+					Width=Dim.Fill(),Height=Dim.Fill(),
+					ReadOnly = true,
+					Text = string.Join("\n", path.properties.Select(p => p.desc)),
+				});
+
+				Application.Run(d);
+			}
 			void ShowContext (string path) {
 				IEnumerable<MenuItem> GetCommon () {
 					yield return new MenuItem("Properties", "", () => { });
@@ -561,6 +708,7 @@ View[] Create () {
 						}, canExecute: () => !locked.Contains(path));
 
 					} else {
+						//git.repo.RetrieveStatus("lll") == FileStatus.
 						if(git is { patch: { } patch }) {
 							var local = path.Replace(git.root + Path.DirectorySeparatorChar, "");
 							var p = patch[local];
@@ -571,8 +719,6 @@ View[] Create () {
 								bool canUnstage = false;
 								bool canStage = true;
 								if(entry != null) {
-
-
 									var blob = git.repo.Lookup<Blob>(entry.Id);
 									var b = blob.GetContentText();
 									var f = File.ReadAllText(path).Replace("\r", "");
@@ -601,7 +747,7 @@ View[] Create () {
 					}
 				}
 
-				var c = new ContextMenu(5, 5, new([.. GetCommon()])) { };
+				var c = new ContextMenu(pathList.Bounds.X, pathList.Bounds.Y, new([.. GetCommon()])) { };
 				c.Show();
 			}
 			bool GetItem (out PathItem p) {
@@ -626,7 +772,7 @@ View[] Create () {
 					SetCwd(dest);
 					UpdateButtons();
 
-					if(cwdData.FirstOrDefault(p => p.name == f) is { } item) {
+					if(cwdData.FirstOrDefault(p => p.local == f) is { } item) {
 						pathList.SelectedItem = cwdData.IndexOf(item);
 					}
 				}
@@ -656,18 +802,32 @@ View[] Create () {
 					return;
 				}
 				var i = cwdData[pathList.SelectedItem];
-				if(i.restricted) return;
-				if(i.dir) {
-					GoPath(i.path);
-				} else if(i.name.EndsWith(".zip")) {
-					using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
-						foreach(ZipArchiveEntry entry in zip.Entries)
-							if(entry.Name == "myfile")
-								entry.ExtractToFile("myfile");
+				Go(i);
+				void Go(PathItem i) {
+					
+
+					if(i.propertyDict.TryGetValue(Prop.IS_LINK_TO.id, out var link)) {
+						var dest = ((Prop<string>)link).data;
+						var destItem = CreatePathItem(dest);
+						Go(destItem);
+						return;
 					}
-				} else {
+					if(i.propertyDict.ContainsKey(Prop.IN_ZIP.id)) {
+						using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
+							foreach(ZipArchiveEntry entry in zip.Entries)
+								if(entry.Name == "myfile")
+									entry.ExtractToFile("myfile");
+						}
+						return;
+					}
+
+					if(i.dir) {
+						GoPath(i.path);
+						return;
+					}
 					Run(i.path);
 				}
+				
 			}
 			void RefreshCwd () {
 				SetCwd(cwd);
@@ -704,6 +864,54 @@ View[] Create () {
 			procData.AddRange(Process.GetProcesses().Where(p => p.MainWindowHandle != 0).Select(p => new ProcItem(p)));
 			procList.SetNeedsDisplay();
 		}
+		void UpdateGit() {
+			if(git is { root: { } root, repo: { } repo }) {
+				if(cwd.StartsWith(root)) {
+					git = git with { patch = repo.Diff.Compare<Patch>() };
+					UpdateChanges();
+				} else {
+					gitData.Clear();
+					repo.Dispose();
+					git = default;
+				}
+			} else {
+				if(Repository.IsValid(cwd)) {
+					var re = new Repository(cwd);
+					git = (cwd, re, re.Diff.Compare<Patch>());
+					UpdateChanges();
+				}
+			}
+
+			void UpdateChanges () {
+
+				gitData.Clear();
+
+				var index = git.repo.Index;
+				var changes = git.patch.Select(patch => {
+					var local = patch.Path;
+					var entry = index[local];
+
+					bool staged = false;
+					if(entry != null) {
+						var blob = git.repo.Lookup<Blob>(entry.Id);
+						var b = blob.GetContentText();
+						var f = File.ReadAllText($"{git.root}/{local}").Replace("\r", "");
+						staged = f == b;
+					}
+					var item = new GitItem(local, patch, staged);
+					return item;
+				}).OrderByDescending(item=>item.staged ? 1 : 0);
+				gitData.AddRange([..changes]);
+				gitList.SetSource(gitData);
+				foreach(var(i, it) in gitData.Index()) {
+					gitList.Source.SetMark(i, it.staged);
+				}
+				gitList.OpenSelectedItem += e => {
+					//Stage/Unstage
+					int i = 0;
+				};
+			}
+		}
 		/*
 		//void AddListenersMulti ((View view, MousePressGen MouseClick, KeyPressGen KeyPress)[] pairs) => pairs.ToList().ForEach(pair => AddListeners(pair.view, pair.MouseClick, pair.KeyPress));
 		void AddListeners(View view, MousePressGen MouseClick = null, KeyPressGen KeyPress = null) {
@@ -712,18 +920,38 @@ View[] Create () {
 			if(MouseClick != null) AddMouseClick(view, MouseClick);
 		}
 		*/
+		PathItem CreatePathItem (string f) =>
+			new PathItem(Path.GetFileName(f), f, Directory.Exists(f), new(GetProps(f)));
+		IEnumerable<IProp> GetProps (string path) {
+			if(locked.Contains(path)) {
+				yield return Prop.IS_LOCKED;
+			}
+			if(Directory.Exists(path)) {
+				yield return Prop.IS_DIRECTORY;
+			} else {
+				if(path.EndsWith(".sln")) {
+					yield return Prop.IS_SOLUTION;
+				}
+				if(path.EndsWith(".lnk")) {
+					// WshShellClass shell = new WshShellClass();
+					WshShell shell = new WshShell(); //Create a new WshShell Interface
+					IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
+					yield return Prop.IS_LINK_TO.Generate(link.TargetPath);
+				}
+				if(path.EndsWith(".zip")) {
+					yield return Prop.IS_ZIP;
+				}
+			}
+		}
 		void SetCwd (string s) {
 			try {
-
-				
-
 				var paths = new List<PathItem>([
-					..Directory.GetDirectories(s).Select(
-							f => new PathItem(Path.GetFileName(f), f, true, locked.Contains(f))),
-						..Directory.GetFiles(s).Select(
-							f => new PathItem(Path.GetFileName(f), f, false, locked.Contains(f) ))]);
-
-
+					..Directory.GetDirectories(s).Select(CreatePathItem),
+					..Directory.GetFiles(s).Select(CreatePathItem)
+				]);
+				cwdData.Clear();
+				cwdData.AddRange(paths);
+				pathList.SetSource(cwdData);
 				/*
 				if(s == cwd) {
 					goto UpdateListing;
@@ -734,24 +962,8 @@ View[] Create () {
 				lastIndex[cwd] = pathList.SelectedItem;
 				cwd = Path.GetFullPath(s);
 
-				if(git is { root: { } root, repo: { } repo }) {
-					if(cwd.StartsWith(root)) {
-						git = git with { patch = repo.Diff.Compare<Patch>() };
-					} else {
-						repo.Dispose();
-						git = default;
-					}
-				} else {
-					if(Repository.IsValid(cwd)) {
-						var re = new Repository(cwd);
-						git = (cwd, re, re.Diff.Compare<Patch>());
-					}
-				}
+				UpdateGit();
 
-
-				cwdData.Clear();
-				cwdData.AddRange(paths);
-				pathList.SetSource(cwdData);
 
 				var anonymize = true;
 				var showCwd = cwd;
@@ -785,7 +997,6 @@ View[] Create () {
 			goto Up;
 		}
 	}).Value;
-
 	var findView = new Lazy<View>(() => {
 		var view = new View() {
 			X = 0,
@@ -926,7 +1137,7 @@ View[] Create () {
 		void SetFilter(FindFilter filter) {
 			tree.ClearObjects();
 			tree.AddObject(new FindDir(filter, GetRoot()));
-			tree.ExpandAll();
+			//tree.ExpandAll();
 		}
 		//Print button (no replace)
 		FindLines();
@@ -998,10 +1209,10 @@ View[] Create () {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
-			Height = Dim.Fill(1),
+			Height = Dim.Fill(3),
 			Border = new() { Effect3D = false, DrawMarginFrame = false, BorderStyle = BorderStyle.None}
 		};
-		foreach(var(name, view) in new[] { ("Home", null), ("File", fileView), ("Find", findView), ("Edit", editView), ("Term", termView) }) {
+		foreach(var(name, view) in new[] { ("Home", homeView), ("File", fileView), ("Find", findView), ("Edit", editView), ("Term", termView), ("Git", null) }) {
 			tv.AddTab(new TabView.Tab(name, view), false);
 		}
 		/*
@@ -1018,12 +1229,13 @@ View[] Create () {
 		Y = 0,
 		Width = Dim.Fill(0),
 		Height = Dim.Fill(0),
-		Modal = false,
-		Border = { BorderStyle = BorderStyle.Single, Effect3D = false, DrawMarginFrame = true },
-		TextAlignment = TextAlignment.Left,
+		Border = { BorderStyle = BorderStyle.None, Effect3D = false, DrawMarginFrame = false },
 		Title = "fx",
 	};
-	InitTree([window, mainTabs, term]);
+
+	InitTree([
+		[window, mainTabs, termBar]
+	]);
 	var windowMenuBar = new MenuBar() {
 		Visible = true,
 		Enabled = true,
@@ -1143,6 +1355,18 @@ public record FindLine (string path, int row, int col, string line, string captu
 		yield return this;
 	}
 }
+
+public interface IProp {
+	string id { get; }
+	string desc { get; }
+}
+public record Prop (string id, string desc) : IProp {}
+public record Prop<T>(string id, string desc, T data) : IProp {
+	public delegate string GetDesc (T args);
+	public record Gen(string id, GetDesc getDesc) {
+		public Prop<T> Generate (T args) => new Prop<T>(id, getDesc(args), args);
+	}
+}
 public record Command(string name, string exe, ITarget[] targets) {
 	public static Command Parse(XElement e) {
 		var name = e.A("name");
@@ -1227,12 +1451,28 @@ public record TargetCombo (ITarget[] targets) {
 public record ProcItem(Process p) {
 	public override string ToString () => $"{p.ProcessName,-24}{p.Id, -8}";
 }
-public record PathItem (string name, string path, bool dir, bool restricted, string zipRoot = null) {
+public record PathItem (string local, string path, bool dir, HashSet<IProp> properties = null, string linkTarget = null) {
+	public readonly Dictionary<string, IProp> propertyDict =
+		(properties ?? new())
+		.ToDictionary(p => p.id, p => p);
+
+	public bool dir => propertyDict.ContainsKey("directory");
+	public bool isLocked => propertyDict.ContainsKey("locked");
+
 	//public string type => dir ? "📁" : "📄";
 	//public string locked => restricted ? "🔒" : " ";
-	public string tag => $"{name}{(dir ? "/" : " ")}";
-	public string str => $"{tag,-24}{(restricted ? "X" : " ")}";
+	public string tag => $"{local}{(dir ? "/" : " ")}";
+	public string str => $"{tag,-24}{(isLocked ? "X" : " ")}";
 	public override string ToString () => str;
+}
+public record GitItem (string path, PatchEntryChanges patches, bool staged) {
+	public override string ToString () => $"{Path.GetFileName(path)}";
+}
+
+
+public record Library(string name) {
+	public List<Link> links = new();
+	public record Link(string path, bool visible, bool expand);
 }
 public record State (string cwd, HashSet<string> restricted, Dictionary<string, int> lastIndex) {
 	public State () : this(null, null, null) { }
