@@ -804,24 +804,25 @@ View[] Create () {
 				var i = cwdData[pathList.SelectedItem];
 				Go(i);
 				void Go(PathItem i) {
-					
 
+					if(i.properties.Contains(Prop.IS_LOCKED)) {
+						return;
+					}
 					if(i.propertyDict.TryGetValue(Prop.IS_LINK_TO.id, out var link)) {
 						var dest = ((Prop<string>)link).data;
 						var destItem = CreatePathItem(dest);
 						Go(destItem);
 						return;
 					}
-					if(i.propertyDict.ContainsKey(Prop.IN_ZIP.id)) {
+					if(i.propertyDict.ContainsKey(Prop.IS_ZIP.id)) {
 						using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
-							foreach(ZipArchiveEntry entry in zip.Entries)
-								if(entry.Name == "myfile")
-									entry.ExtractToFile("myfile");
+							foreach(ZipArchiveEntry entry in zip.Entries) {
+								Debug.Print(entry.FullName);
+							}
 						}
 						return;
 					}
-
-					if(i.dir) {
+					if(i.properties.Contains(Prop.IS_DIRECTORY)) {
 						GoPath(i.path);
 						return;
 					}
