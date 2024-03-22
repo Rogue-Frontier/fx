@@ -385,8 +385,8 @@ public record PathItem (string local, string path, bool dir, HashSet<IProp> prop
 	public string str => $"{tag,-24}{(isLocked ? "X" : " ")}";
 	public override string ToString () => str;
 }
-public record GitItem (string path, PatchEntryChanges patches, bool staged) {
-	public override string ToString () => $"{Path.GetFileName(path)}";
+public record GitItem (string local, bool staged) {
+	public override string ToString () => $"{Path.GetFileName(local)}";
 }
 public record Library(string name) {
 	public List<Link> links = new();
@@ -396,14 +396,15 @@ public record Library(string name) {
 public record Session(Fx state, Ctx temp);
 public record Fx {
 	public const string SAVE_PATH = "fx.state.yaml";
-
+	public const string WORK_ROOT = "%WORKROOT%";
 	public string cwd = Environment.CurrentDirectory;
-	public Stack<string> cwdPrev = new();
-	public Stack<string> cwdNext = new();
+	public LinkedList<string> cwdPrev = new();
+	public LinkedList<string> cwdNext = new();
 	public HashSet<string> locked = new();
 	public Dictionary<string, int> lastIndex = new();
 	public List<string> pinned = new();
 
+	public string workroot = null;
 	public Fx () { }
 	public Fx (Ctx ctx) => Load(ctx);
 	public void Load (Ctx ctx) {
@@ -411,11 +412,17 @@ public record Fx {
 		if(File.Exists(SAVE_PATH)) {
 			try {
 				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE));
-				foreach(var f in GetType().GetFields()) {
+				foreach(var f in GetType().GetFields( BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)) {
 					f.Copy(this, o);
 				}
 				lastIndex = new(lastIndex);
-			} finally {
+			}
+#if false
+			catch {
+				File.Delete(SAVE_PATH);
+			}
+#endif
+			finally {
 
 			}
 		}
@@ -448,12 +455,12 @@ public record Ctx {
 		Commands = de.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
 	}
 	public record Git {
-		public string root => repo.Info.Path;
+		public string root => Path.GetFullPath($"{repo.Info.Path}/..");
 		public Repository repo { get; }
 		public Patch patch { get; private set; }
 		public Git (string path) {
 			repo = new(path);
-			RefreshPatch();
+			//RefreshPatch();
 		}
 		public void RefreshPatch () {
 			patch = repo.Diff.Compare<Patch>();

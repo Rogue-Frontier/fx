@@ -12,6 +12,8 @@ using fx;
 using File = System.IO.File;
 using GamerLib;
 using System.Collections;
+using System.Reflection;
+using static Ctx;
 namespace fx;
 public class ExploreSession : ITab {
 	public string TabName => "Explore";
@@ -29,6 +31,9 @@ public class ExploreSession : ITab {
 	private TextField addressBar;
 	public ListView pathList;
 	private ListView gitList;
+
+
+
 	public ExploreSession (Main main) {
 
 		ctx = main.ctx;
@@ -182,7 +187,7 @@ public class ExploreSession : ITab {
 		InitTreeLocal();
 		InitEvents();
 		InitCwd();
-		UpdateButtons();
+		RefreshButtons();
 		UpdateProcesses();
 
 
@@ -330,7 +335,9 @@ public class ExploreSession : ITab {
 						}
 						,
 						'@' => () => {
-							//Copy file path
+							//set dir as workroot
+							fx.workroot = fx.workroot != fx.cwd ? fx.cwd : null;
+							RefreshCwd();
 						}
 						,
 						'#' => () => {
@@ -383,6 +390,25 @@ public class ExploreSession : ITab {
 					_ => null
 				}
 			});
+
+			gitList.OpenSelectedItem += e => {
+				var item = gitData[e.Item];
+				if(item.staged) Commands.Unstage(ctx.git.repo, item.local);
+				else Commands.Stage(ctx.git.repo, item.local);
+				RefreshChanges();
+
+				gitList.SelectedItem = e.Item;
+			};
+
+			gitList.AddMouseClick(e => e.MouseEvent.Flags switch {
+				MouseFlags.Button1Clicked => () => {
+					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
+					gitList.SetNeedsDisplay();
+				}
+				,
+				_ => null
+			});
+
 			/*
 			window.AddKeyPress(e => e.KeyEvent.KeyValue switch {
 				':' => () => {
@@ -417,16 +443,9 @@ public class ExploreSession : ITab {
 			}
 			ContextMenu ShowContext (string path) {
 				IEnumerable<MenuItem> GetCommon () {
-
-
-
-
-
-
 					yield return new MenuItem(Path.GetFileName(path), null, null, () => false);
 					yield return new MenuItem("----", null, null, () => false);
 					yield return new MenuItem("Properties", null, () => { });
-
 					yield return new MenuItem("Find", null, () => {
 						main.FindIn(path);
 					});
@@ -434,7 +453,6 @@ public class ExploreSession : ITab {
 						yield return new MenuItem("Remember", "", () => cwdRecall = path);
 						yield return new MenuItem("Open in Explorer", "", () => RunProc($"explorer.exe {path}"));
 						yield return new MenuItem("New File", "", () => {
-
 							var create = new Button("Create") { Enabled = false };
 							var cancel = new Button("Cancel");
 							var d = new Dialog("New File", [
@@ -461,16 +479,12 @@ public class ExploreSession : ITab {
 							cancel.Clicked += () => {
 								d.RequestStop();
 							};
-
 							d.Add(name);
 							name.SetFocus();
 							Application.Run(d);
 
 						}, canExecute: () => !fx.locked.Contains(path));
-
-
 						yield return new MenuItem("New Directory", "", () => {
-
 							var create = new Button("Create") { Enabled = false };
 							var cancel = new Button("Cancel");
 							var d = new Dialog("New Directory", [
@@ -497,46 +511,33 @@ public class ExploreSession : ITab {
 							cancel.Clicked += () => {
 								d.RequestStop();
 							};
-
 							d.Add(name);
 							name.SetFocus();
 							Application.Run(d);
-
 						}, canExecute: () => !fx.locked.Contains(path));
-
-					} else {
-						//git.repo.RetrieveStatus("lll") == FileStatus.
-						if(ctx.git is { patch: { } patch }) {
-							var local = path.Replace(ctx.git.root + Path.DirectorySeparatorChar, "");
-							var p = patch[local];
-							if(p?.Status == ChangeKind.Modified) {
-								var index = ctx.git.repo.Index;
-								var entry = index[local];
-
-								bool canUnstage = false;
-								bool canStage = true;
-								if(entry != null) {
-									var blob = ctx.git.repo.Lookup<Blob>(entry.Id);
-									var b = blob.GetContentText();
-									var f = File.ReadAllText(path).Replace("\r", "");
-									if(b == f) {
-										canUnstage = true;
-										canStage = false;
-									}
-								}
-								if(canStage) {
-									yield return new MenuItem("Stage", "", () => {
-										index.Add(local);
-									});
-								}
-								if(canUnstage) {
-									yield return new MenuItem("Unstage", "", () => {
-										index.Remove(local);
-									});
-								}
-							}
-						}
+						goto Done;
 					}
+					if(ctx.git == null) {
+						goto Done;
+					}
+					var local = path.Replace(ctx.git.root + Path.DirectorySeparatorChar, "");
+					if(ctx.git.repo.RetrieveStatus(local) switch {
+
+						FileStatus.ModifiedInWorkdir =>
+							new MenuItem("Stage", "", () => {
+								Commands.Stage(ctx.git.repo, local);
+								RefreshChanges();
+							}),
+						FileStatus.ModifiedInIndex =>
+							new MenuItem("Unstage", "", () => {
+								Commands.Unstage(ctx.git.repo, local);
+								RefreshChanges();
+							}),
+						_ => null
+					} is { } mi) {
+						yield return mi;
+					}
+					Done:
 					yield return new("Copy Path", "", () => { Clipboard.TrySetClipboardData(path); });
 					foreach(var c in ctx.Commands) {
 						if(c.Accept(path))
@@ -561,20 +562,24 @@ public class ExploreSession : ITab {
 				(i = Math.Min(cwdData.Count - 1, pathList.SelectedItem)) != -1;
 			
 			bool GoPrev (int times = 1) => Enumerable.Range(0, times).All(_ => {
-				if(fx.cwdPrev.TryPop(out var prev) is { } b && b) {
-					fx.cwdNext.Push(fx.cwd);
+				if(fx.cwdPrev is { Last: { Value: { }prev } }l) {
+					l.RemoveLast();
+					fx.cwdNext.AddLast(fx.cwd);
 					SetCwd(prev);
-					UpdateButtons();
+					RefreshButtons();
+					return true;
 				}
-				return b;
+				return false;
 			});
 			bool GoNext (int times = 1) => Enumerable.Range(0, times).All(_ => {
-				if(fx.cwdNext.TryPop(out var next) is { } b && b) {
-					fx.cwdPrev.Push(fx.cwd);
+				if(fx.cwdNext is { Last:{Value:{ }next} }l) {
+					l.RemoveLast();
+					fx.cwdPrev.AddLast(fx.cwd);
 					SetCwd(next);
-					UpdateButtons();
+					RefreshButtons();
+					return true;
 				}
-				return b;
+				return false;
 			});
 			bool GoLeft (int times = 1) =>
 				Enumerable.Range(0, times).All(
@@ -585,9 +590,6 @@ public class ExploreSession : ITab {
 				}
 				Go(cwdData[pathList.SelectedItem]);
 				void Go (PathItem i) {
-
-
-
 					if(i.properties.Contains(Props.IS_LOCKED)) {
 						return;
 					}
@@ -707,9 +709,16 @@ public class ExploreSession : ITab {
 
 
 			var anonymize = true;
+			var userProfile = ctx.USER_PROFILE;
 			var showCwd = fx.cwd;
+
+			if(fx.workroot is { }root) {
+				showCwd = showCwd.Replace(root, Fx.WORK_ROOT);
+				userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
+			}
+
 			if(anonymize) {
-				showCwd = showCwd.Replace(ctx.USER_PROFILE, Ctx.USER_PROFILE_MASK);
+				showCwd = showCwd.Replace(userProfile, Ctx.USER_PROFILE_MASK);
 			}
 			//Anonymize
 			addressBar.Text = showCwd;
@@ -724,19 +733,22 @@ public class ExploreSession : ITab {
 	}
 	bool GoPath (string? dest) {
 		var f = Path.GetFileName(fx.cwd);
-		if(Directory.Exists(dest) is { } b && b) {
-			fx.cwdNext.Clear();
-			fx.cwdPrev.Push(fx.cwd);
-			SetCwd(dest);
-			UpdateButtons();
-
-			if(cwdData.FirstOrDefault(p => p.local == f) is { } item) {
-				pathList.SelectedItem = cwdData.IndexOf(item);
-			}
+		if(fx.workroot is { } root && !dest.Contains(root)) {
+			return false;
 		}
-		return b;
+		if(Directory.Exists(dest)) {
+			fx.cwdNext.Clear();
+			fx.cwdPrev.AddLast(fx.cwd);
+			SetCwd(dest);
+			RefreshButtons();
+			if(cwdData.FindIndex(p => p.local == f) is {}ind and not -1) {
+				pathList.SelectedItem = ind;
+			}
+			return true;
+		}
+		return false;
 	}
-	void UpdateButtons () =>
+	void RefreshButtons () =>
 		SView.ForTuple((Button button, IEnumerable<string> items) => {
 			button.Enabled = items.Any();
 		}, [
@@ -757,7 +769,6 @@ public class ExploreSession : ITab {
 		yield return full;
 		goto Up;
 	}
-
 	private void UpdateGit () {
 		if(ctx.git is { root: { } root, repo: { } repo }) {
 			if(fx.cwd.StartsWith(root)) {
@@ -774,38 +785,39 @@ public class ExploreSession : ITab {
 				RefreshChanges();
 			}
 		}
+	}
+	public void RefreshChanges () {
+		gitData.Clear();
+		var git = ctx.git;
 
-		void RefreshChanges () {
-			if(true) {
-				return;
-			}
-			gitData.Clear();
+		/*
+		git.RefreshPatch();
+		var index = git.repo.Index;
+		var changes = git.patch.Select(patch => {
+			var local = patch.Path;
+			var entry = index[local];
+			var staged = git.repo.RetrieveStatus(local) == FileStatus.ModifiedInIndex;
+			var item = new GitItem(local, patch, staged);
+			return item;
+		}).OrderByDescending(item => item.staged ? 1 : 0);
+		*/
 
-			var index = ctx.git.repo.Index;
-			var changes = ctx.git.patch.Select(patch => {
-				var local = patch.Path;
-				var entry = index[local];
-
-				bool staged = false;
-				if(entry != null) {
-					var blob = ctx.git.repo.Lookup<Blob>(entry.Id);
-					var b = blob.GetContentText();
-					var f = File.ReadAllText($"{ctx.git.root}/{local}").Replace("\r", "");
-					staged = f == b;
+		IEnumerable<GitItem> GetItems () {
+			foreach(var item in git.repo.RetrieveStatus()) {
+				if(item.State switch {
+					FileStatus.ModifiedInIndex => new GitItem(item.FilePath, true),
+					FileStatus.ModifiedInWorkdir => new GitItem(item.FilePath, false),
+					_ => null
+				} is { } it) {
+					yield return it;
 				}
-				var item = new GitItem(local, patch, staged);
-				return item;
-			}).OrderByDescending(item => item.staged ? 1 : 0);
-			gitData.AddRange([.. changes]);
-			gitList.SetSource(gitData);
-			foreach(var (i, it) in gitData.Index()) {
-				gitList.Source.SetMark(i, it.staged);
 			}
-			gitList.OpenSelectedItem += e => {
-				//Stage/Unstage
-				int i = 0;
-			};
+		}
 
+		gitData.AddRange(GetItems());
+		gitList.SetSource(gitData);
+		foreach(var (i, it) in gitData.Index()) {
+			gitList.Source.SetMark(i, it.staged);
 		}
 	}
 }
