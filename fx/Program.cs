@@ -275,18 +275,20 @@ public static class Props {
 	public static IProp
 		IS_LOCKED = new Prop("locked", "Locked"),
 		IS_DIRECTORY = new Prop("directory", "Directory"),
-		IS_STAGED = new Prop("gitStagedChanges", "Staged Changes"),
-		IS_UNSTAGED = new Prop("gitUnstagedChanges", "Unstaged Changes"),
+		IS_STAGED = new Prop("gitStagedChanges", "- Staged Changes"),
+		IS_UNSTAGED = new Prop("gitUnstagedChanges", "- Unstaged Changes"),
 		IS_SOLUTION = new Prop("visualStudioSolution", "Visual Studio Solution"),
 		IS_REPOSITORY = new Prop("gitRepository", "Git Repository"),
 		IS_ZIP = new Prop("zipArchive", "Zip Archive");
 	public static IPropGen
 		IS_LINK_TO = new PropGen<string>("link", dest => $"Link To: {dest}"),
-		IN_REPOSITORY = new PropGen<Repository>("gitRepositoryItem", repo => $"In Repository: {repo.Info.Path}"),
+		IN_REPOSITORY = new PropGen<(Repository repo, string local)>("gitRepositoryItem", pair => $"In Repository: {pair.repo.GetRoot()}"),
 		IN_LIBRARY = new PropGen<Library>("libraryItem", library => $"In Library: {library.name}"),
 		IN_SOLUTION = new PropGen<string>("solutionItem", solutionPath => $"In Solution: {solutionPath}"),
 		IN_ZIP = new PropGen<string>("zipItem", zipRoot => $"In Zip: {zipRoot}");
-		
+
+	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
+
 }
 public record Prop (string id, string desc) : IProp {
 }
@@ -372,10 +374,24 @@ public record TargetCombo (ITarget[] targets) {
 public record ProcItem(Process p) {
 	public override string ToString () => $"{p.ProcessName,-24}{p.Id, -8}";
 }
-public record PathItem (string local, string path, bool dir, HashSet<IProp> properties = null, string linkTarget = null) {
+public record PathItem (string local, string path, HashSet<IProp> propertySet = null, string linkTarget = null) {
 	public readonly Dictionary<string, IProp> propertyDict =
-		(properties ?? new())
+		(propertySet ?? new())
 		.ToDictionary(p => p.id, p => p);
+
+	public bool HasProp (IProp p) => propertySet.Contains(p);
+	public bool HasProp (IPropGen p) => propertyDict.ContainsKey(p.id);
+	public bool HasProp<T> (IPropGen p, T data) where T:notnull => propertyDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
+
+	public bool GetProp<T> (IPropGen p, out T data) {
+		data =
+			propertyDict.TryGetValue(p.id, out var prop) is { } b && b ?
+				((Prop<T>)prop).data :
+				default;
+		return b;
+	}
+	public T GetProp<T> (IPropGen p) => ((Prop<T>)propertyDict[p.id]).data;
+
 	public bool dir => propertyDict.ContainsKey("directory");
 	public bool isLocked => propertyDict.ContainsKey("locked");
 
@@ -385,7 +401,7 @@ public record PathItem (string local, string path, bool dir, HashSet<IProp> prop
 	public string str => $"{tag,-24}{(isLocked ? "X" : " ")}";
 	public override string ToString () => str;
 }
-public record GitItem (string local, bool staged) {
+public record GitItem (string local, string path, bool staged) {
 	public override string ToString () => $"{Path.GetFileName(local)}";
 }
 public record Library(string name) {
@@ -455,7 +471,7 @@ public record Ctx {
 		Commands = de.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
 	}
 	public record Git {
-		public string root => Path.GetFullPath($"{repo.Info.Path}/..");
+		public string root => repo.GetRoot();
 		public Repository repo { get; }
 		public Patch patch { get; private set; }
 		public Git (string path) {
@@ -465,6 +481,7 @@ public record Ctx {
 		public void RefreshPatch () {
 			patch = repo.Diff.Compare<Patch>();
 		}
+		public string GetRepoLocal (string path) => path.Replace(root + Path.DirectorySeparatorChar, null);
 	}
 }
 public record Config (Dictionary<string, string> programs = null, Command[] commands = null) {
