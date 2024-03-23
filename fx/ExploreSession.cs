@@ -18,6 +18,8 @@ using Microsoft.Build.Construction;
 using System.Reflection.Metadata.Ecma335;
 using static fx.Props;
 using System.Collections.Concurrent;
+using static System.Net.Mime.MediaTypeNames;
+using Application = Terminal.Gui.Application;
 namespace fx;
 public class ExploreSession : ITab {
 	public string TabName => "Explore";
@@ -47,11 +49,11 @@ public class ExploreSession : ITab {
 
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
-
+	private string cwdRecall = null;
 	public ExploreSession (Main main) {
 		ctx = main.ctx;
 		var favData = new List<PathItem>();
-		var cwdRecall = (string)null;
+		
 		var procData = new List<ProcItem>();
 
 		root = new View() {
@@ -406,149 +408,11 @@ public class ExploreSession : ITab {
 				_ => null
 			});
 			*/
-			void ShowProperties (PathItem item) {
-				var d = new Dialog($"Properties: {item.path}", []) {
-					Border = {
-						Effect3D = false
-					}
-				};
-				d.KeyPress += e => {
-					e.Set();
-					d.Running = false;
-				};
-
-				d.Add(new TextView() {
-					X = 0,
-					Y = 0,
-					Width = Dim.Fill(),
-					Height = Dim.Fill(),
-					ReadOnly = true,
-					Text = string.Join("\n", item.propertySet.Select(p => p.desc)),
-				});
-
-				Application.Run(d);
-			}
+			
 			ContextMenu ShowContext (PathItem item) {
-				IEnumerable<MenuItem> GetCommon () {
-					yield return new MenuItem(item.local, null, null, () => false);
-					yield return new MenuItem("----", null, null, () => false);
-					yield return new MenuItem("Find", null, () => {
-						main.FindIn(item.path);
-					});
-					if(item.HasProp(IS_DIRECTORY)) {
-						yield return new MenuItem("Remember", "", () => cwdRecall = item.path);
-						yield return new MenuItem("Open in Explorer", "", () => RunProc($"explorer.exe {item.path}"));
-						yield return new MenuItem("New File", "", () => {
-							var create = new Button("Create") { Enabled = false };
-							var cancel = new Button("Cancel");
-							var d = new Dialog("New File", [
-								create, cancel
-								]) { Width = 32, Height = 5 };
-							d.Border.Effect3D = false;
-							var name = new TextField() {
-								X = 0,
-								Y = 0,
-								Width = Dim.Fill(2),
-								Height = 1,
-							};
-							name.TextChanging += e => {
-								create.Enabled = e.NewText.Any();
-							};
-							create.Clicked += delegate {
-								var f = Path.Combine(item.path, name.Text.ToString());
-								File.Create(f);
-								//select this file
-								RefreshCwd();
-								pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
-								d.RequestStop();
-							};
-							cancel.Clicked += () => {
-								d.RequestStop();
-							};
-							d.Add(name);
-							name.SetFocus();
-							Application.Run(d);
-
-						}, canExecute: () => !item.HasProp(IS_LOCKED));
-						yield return new MenuItem("New Directory", "", () => {
-							var create = new Button("Create") { Enabled = false };
-							var cancel = new Button("Cancel");
-							var d = new Dialog("New Directory", [
-								create, cancel
-								]) { Width = 32, Height = 5 };
-							d.Border.Effect3D = false;
-							var name = new TextField() {
-								X = 0,
-								Y = 0,
-								Width = Dim.Fill(2),
-								Height = 1,
-							};
-							name.TextChanging += e => {
-								create.Enabled = e.NewText.Any();
-							};
-							create.Clicked += delegate {
-								var f = Path.Combine(item.path, name.Text.ToString());
-								Directory.CreateDirectory(f);
-								//select this file
-								RefreshCwd();
-								pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
-								d.RequestStop();
-							};
-							cancel.Clicked += () => {
-								d.RequestStop();
-							};
-							d.Add(name);
-							name.SetFocus();
-							Application.Run(d);
-						}, canExecute: () => !item.HasProp(IS_LOCKED));
-						goto Done;
-					}
-
-					var parItem = GetPathItem(Path.GetDirectoryName(item.path));
-
-
-					if(item.GetProp<RepoItem>(IN_REPOSITORY, out var pair)) {
-						var (root, local) = pair;
-
-						IEnumerable<string> Paths () {
-							yield return local;
-						}
-						var diff = new MenuItem("Diff", "", () => {
-							using(var repo = new Repository(root)) {
-								var patch = repo.Diff.Compare<Patch>(Paths());
-								Preview($"Diff: {item.path}", patch.Content);
-							}
-						});
-						if(item.HasProp(IS_UNSTAGED)) {
-							yield return new MenuItem("Stage", "", () => {
-								using(var repo = new Repository(root)) {
-									Commands.Stage(repo, local);
-								}
-								RefreshCwd();
-							});
-							yield return diff;
-						} else if(item.HasProp(IS_STAGED)) {
-							yield return new MenuItem("Unstage", "", () => {
-								using(var repo = new Repository(root)) {
-									Commands.Unstage(repo, local);
-								}
-								RefreshCwd();
-							});
-							yield return diff;
-						}
-					}
-					Done:
-					yield return new("Copy Path", "", () => { Clipboard.TrySetClipboardData(item.path); });
-					foreach(var c in ctx.Commands) {
-						if(c.Accept(item.path))
-							yield return new(c.name, "", () => RunProc(c.GetCmd(item.path)));
-					}
-
-					yield return new MenuItem("Properties", null, () => { ShowProperties(item); });
-				}
 
 				var c = new ContextMenu(pathList, new(Path.GetFileName(item.path),
-					[.. GetCommon()]));
+					[.. GetActions(main, item)]));
 				c.Show();
 				return c;
 			}
@@ -585,16 +449,16 @@ public class ExploreSession : ITab {
 				}
 				Go(cwdData[pathList.SelectedItem]);
 				void Go (PathItem i) {
-					if(i.propertySet.Contains(IS_LOCKED)) {
+					if(i.propSet.Contains(IS_LOCKED)) {
 						return;
 					}
-					if(i.propertyDict.TryGetValue(IS_LINK_TO.id, out var link)) {
+					if(i.propDict.TryGetValue(IS_LINK_TO.id, out var link)) {
 						var dest = ((Prop<string>)link).data;
 						var destItem = GetPathItem(dest);
 						Go(destItem);
 						return;
 					}
-					if(i.propertyDict.ContainsKey(IS_ZIP.id)) {
+					if(i.propDict.ContainsKey(IS_ZIP.id)) {
 						using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
 							foreach(ZipArchiveEntry entry in zip.Entries) {
 								Debug.Print(entry.FullName);
@@ -602,33 +466,15 @@ public class ExploreSession : ITab {
 						}
 						return;
 					}
-					if(i.propertySet.Contains(IS_DIRECTORY)) {
+					if(i.propSet.Contains(IS_DIRECTORY)) {
 						GoPath(i.path);
 						return;
 					}
-					RunProc(i.path);
+					RunProc(main, i.path);
 				}
 
 			}
-			Process RunProc (string cmd) {
-				//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
-				var cmdArgs = @$"/c {cmd}";
-				var pi = new ProcessStartInfo("cmd.exe") {
-					WorkingDirectory = fx.cwd,
-					Arguments = $"{cmdArgs}",
-					UseShellExecute = true,
-					WindowStyle = ProcessWindowStyle.Hidden,
-					//CreateNoWindow = true,
-				};
-				var p = new Process() {
-					StartInfo = pi
-
-				};
-				p.Start();
-
-				main.ReadProc(p);
-				return p;
-			}
+			
 		}
 		void InitCwd () {
 			SetCwd(fx.cwd);
@@ -654,6 +500,47 @@ public class ExploreSession : ITab {
 	public IEnumerable<PathItem> GetMarkedItems () =>
 		GetMarkedIndex().Select(i => cwdData[i]);
 
+	void ShowProperties (PathItem item) {
+		var d = new Dialog($"Properties: {item.path}", []) {
+			Border = {
+				Effect3D = false
+			}
+		};
+		d.KeyPress += e => {
+			e.Set();
+			d.Running = false;
+		};
+
+		d.Add(new TextView() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(),
+			ReadOnly = true,
+			Text = string.Join("\n", item.propSet.Select(p => p.desc)),
+		});
+
+		Application.Run(d);
+	}
+	Process RunProc (Main main, string cmd) {
+		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
+		var cmdArgs = @$"/c {cmd}";
+		var pi = new ProcessStartInfo("cmd.exe") {
+			WorkingDirectory = fx.cwd,
+			Arguments = $"{cmdArgs}",
+			UseShellExecute = true,
+			WindowStyle = ProcessWindowStyle.Hidden,
+			//CreateNoWindow = true,
+		};
+		var p = new Process() {
+			StartInfo = pi
+
+		};
+		p.Start();
+
+		main.ReadProc(p);
+		return p;
+	}
 	/// <param name="path">This is strictly a child of cwd.</param>
 	/// <remarks>Strictly called after <see cref="RefreshRepo(string)"/>, so we already know repo props for the parent directory.</remarks>
 	IEnumerable<IProp> GetProps (string path) {
@@ -678,11 +565,12 @@ public class ExploreSession : ITab {
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;
 			}
-
-
-			//yield return IN_REPOSITORY;
-
 		}
+		if(Path.GetDirectoryName(path) is { } par && HasRepo(GetPathItem(par), out var root)) {
+			yield return IN_REPOSITORY.Make(CalcRepoItem(root, path));
+		}
+
+
 		if(gitMap.TryGetValue(path, out var p)) {
 			if(p.staged) {
 				yield return IS_STAGED;
@@ -690,6 +578,123 @@ public class ExploreSession : ITab {
 				yield return IS_UNSTAGED;
 			}
 		}
+	}
+
+	IEnumerable<MenuItem> GetActions (Main main, PathItem item) {
+		yield return new MenuItem(item.local, null, null, () => false);
+		yield return new MenuItem("----", null, null, () => false);
+		yield return new MenuItem("Find", null, () => {
+			main.FindIn(item.path);
+		});
+		if(item.HasProp(IS_DIRECTORY)) {
+			yield return new MenuItem("Remember", "", () => cwdRecall = item.path);
+			yield return new MenuItem("Open in Explorer", "", () => RunProc(main, $"explorer.exe {item.path}"));
+			yield return new MenuItem("New File", "", () => {
+				var create = new Button("Create") { Enabled = false };
+				var cancel = new Button("Cancel");
+				var d = new Dialog("New File", [
+					create, cancel
+					]) { Width = 32, Height = 5 };
+				d.Border.Effect3D = false;
+				var name = new TextField() {
+					X = 0,
+					Y = 0,
+					Width = Dim.Fill(2),
+					Height = 1,
+				};
+				name.TextChanging += e => {
+					create.Enabled = e.NewText.Any();
+				};
+				create.Clicked += delegate {
+					var f = Path.Combine(item.path, name.Text.ToString());
+					File.Create(f);
+					//select this file
+					RefreshCwd();
+					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					d.RequestStop();
+				};
+				cancel.Clicked += () => {
+					d.RequestStop();
+				};
+				d.Add(name);
+				name.SetFocus();
+				Application.Run(d);
+
+			}, canExecute: () => !item.HasProp(IS_LOCKED));
+			yield return new MenuItem("New Directory", "", () => {
+				var create = new Button("Create") { Enabled = false };
+				var cancel = new Button("Cancel");
+				var d = new Dialog("New Directory", [
+					create, cancel
+					]) { Width = 32, Height = 5 };
+				d.Border.Effect3D = false;
+				var name = new TextField() {
+					X = 0,
+					Y = 0,
+					Width = Dim.Fill(2),
+					Height = 1,
+				};
+				name.TextChanging += e => {
+					create.Enabled = e.NewText.Any();
+				};
+				create.Clicked += delegate {
+					var f = Path.Combine(item.path, name.Text.ToString());
+					Directory.CreateDirectory(f);
+					//select this file
+					RefreshCwd();
+					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					d.RequestStop();
+				};
+				cancel.Clicked += () => {
+					d.RequestStop();
+				};
+				d.Add(name);
+				name.SetFocus();
+				Application.Run(d);
+			}, canExecute: () => !item.HasProp(IS_LOCKED));
+			goto Done;
+		}
+
+		var parItem = GetPathItem(Path.GetDirectoryName(item.path));
+
+		if(HasRepo(parItem, out string root)) {
+
+			string local = git.repo.GetRepoLocal(item.path);
+			IEnumerable<string> Paths () {
+				yield return local;
+			}
+			var diff = new MenuItem("Diff", "", () => {
+				using(var repo = new Repository(root)) {
+					var patch = repo.Diff.Compare<Patch>(Paths());
+					Preview($"Diff: {item.path}", patch.Content);
+				}
+			});
+			if(item.HasProp(IS_UNSTAGED)) {
+				yield return new MenuItem("Stage", "", () => {
+					using(var repo = new Repository(root)) {
+						Commands.Stage(repo, local);
+					}
+					RefreshCwd();
+				});
+				yield return diff;
+			} else if(item.HasProp(IS_STAGED)) {
+				yield return new MenuItem("Unstage", "", () => {
+					using(var repo = new Repository(root)) {
+						Commands.Unstage(repo, local);
+					}
+					RefreshCwd();
+				});
+				yield return diff;
+			}
+		}
+		Done:
+		yield return new("Copy Path", "", () => { Clipboard.TrySetClipboardData(item.path); });
+		foreach(var c in ctx.Commands) {
+			if(c.Accept(item.path))
+				yield return new(c.name, "", () => RunProc(main, c.GetCmd(item.path)));
+		}
+
+		yield return new MenuItem("Properties", null, () => { ShowProperties(item); });
 	}
 	PathItem GetPathItem (string path) {
 		return pathData[path] =
@@ -708,10 +713,9 @@ public class ExploreSession : ITab {
 			if(stillInRepo) {
 				//If we're in the repo but not at root, remember that this directory is within the repository
 				if(path != root && !item.HasProp(IN_REPOSITORY)) {
-					var add = ((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path));
-
+					var next = ((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path));
 					//TO DO: fix adding attributes
-					pathData[path] = item with { propertySet = new([..item.propertySet, add]) };
+					pathData[path] = new(item.local, item.path, new([.. item.propSet, next]));
 				}
 				RefreshChanges();
 			} else {
@@ -721,7 +725,8 @@ public class ExploreSession : ITab {
 			}
 		} else if(Repository.IsValid(path)) {
 			//Mark this directory as a known repository.
-			pathData[path] = item with { propertySet = new([.. item.propertySet, IS_REPOSITORY]) };
+
+			pathData[path] = new(item.local, item.path, new([.. item.propSet, IS_REPOSITORY]));
 			SetRepo(path);
 			RefreshChanges();
 		} else if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoFile, out var prop)) {
@@ -731,7 +736,7 @@ public class ExploreSession : ITab {
 				RefreshChanges();
 			} else {
 				//Error
-				pathData[path] = item with { propertySet = new(item.propertySet.Except([prop])) };
+				pathData[path] = new(item.local, item.path, new(item.propSet.Except([prop])));
 			}
 		}
 	}
@@ -833,8 +838,8 @@ public class ExploreSession : ITab {
 		}
 	}
 	bool GetItem (out PathItem p) {
-		p = null;
 		if(pathList.SelectedItem >= cwdData.Count) {
+			p = null;
 			return false;
 		}
 		p = cwdData[pathList.SelectedItem];
@@ -889,12 +894,11 @@ public static class Props {
 
 	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
 	public static string GetRepoLocal (this Repository repo, string path) => path.Replace(repo.GetRoot() + Path.DirectorySeparatorChar, null);
+	public static string GetRepoLocal (string root, string path) => path.Replace(root + Path.DirectorySeparatorChar, null);
+	public static RepoItem CalcRepoItem (this Repository repo, string path) => CalcRepoItem(repo.GetRoot(), path);
+	public static RepoItem CalcRepoItem (string root, string path) =>
+		new(root, GetRepoLocal(root, path));
 
-	public static RepoItem CalcRepoItem(this Repository repo, string path) {
-		var root = repo.GetRoot();
-		var local = path.Replace(root + Path.DirectorySeparatorChar, null);
-		return new(root, local);
-	}
 	public static bool HasRepo(PathItem item, out string root) {
 		if(item.HasProp(IS_REPOSITORY)) {
 			root = item.path;
@@ -915,6 +919,8 @@ public record Prop (string id, string desc) : IProp {}
 public record Prop<T> (string id, string desc, T data) : IProp {}
 public interface IPropGen {
 	string id { get; }
+	public Prop<T> Make<T> (T data) => ((PropGen<T>)this).Generate(data);
+
 }
 public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
 	public delegate string GetDesc (T args);
@@ -923,28 +929,28 @@ public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
 public record ProcItem (Process p) {
 	public override string ToString () => $"{p.ProcessName,-24}{p.Id,-8}";
 }
-public record PathItem (string local, string path, HashSet<IProp> propertySet) {
-	public readonly Dictionary<string, IProp> propertyDict =
-		propertySet?.ToDictionary(p => p.id, p => p);
-	public bool HasProp (IProp p) => propertySet.Contains(p);
-	public bool HasProp (IPropGen p) => propertyDict.ContainsKey(p.id);
-	public bool HasProp<T> (IPropGen p, T data) where T : notnull => propertyDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
-	public bool GetProp (IPropGen p, out IProp prop) => propertyDict.TryGetValue(p.id, out prop);
+public record PathItem (string local, string path, HashSet<IProp> propSet) {
+	public readonly Dictionary<string, IProp> propDict =
+		propSet?.ToDictionary(p => p.id, p => p);
+	public bool HasProp (IProp p) => propSet.Contains(p);
+	public bool HasProp (IPropGen p) => propDict.ContainsKey(p.id);
+	public bool HasProp<T> (IPropGen p, T data) where T : notnull => propDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
+	public bool GetProp (IPropGen p, out IProp prop) => propDict.TryGetValue(p.id, out prop);
 	public bool GetProp<T> (IPropGen p, out T data) {
 		data =
-			propertyDict.TryGetValue(p.id, out var prop) is { } b && b ?
+			propDict.TryGetValue(p.id, out var prop) is { } b && b ?
 				((Prop<T>)prop).data :
 				default;
 		return b;
 	}
 	public bool GetProp<T> (IPropGen p, out T data, out IProp prop) {
 		data =
-			propertyDict.TryGetValue(p.id, out prop) is { } b && b ?
+			propDict.TryGetValue(p.id, out prop) is { } b && b ?
 				((Prop<T>)prop).data :
 				default;
 		return b;
 	}
-	public T GetProp<T> (IPropGen p) => ((Prop<T>)propertyDict[p.id]).data;
+	public T GetProp<T> (IPropGen p) => ((Prop<T>)propDict[p.id]).data;
 	public bool dir => HasProp(IS_DIRECTORY);
 	public bool isLocked => HasProp(IS_LOCKED);
 	//public string type => dir ? "📁" : "📄";
