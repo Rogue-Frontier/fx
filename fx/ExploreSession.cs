@@ -45,7 +45,7 @@ public class ExploreSession : ITab {
 	private ListView gitList;
 
 	//When we cd out of a repository, we immediately forget about it.
-	private (string root, Repository repo) git;
+	private RepoPtr? git;
 
 	public ExploreSession (Main main) {
 		ctx = main.ctx;
@@ -502,7 +502,7 @@ public class ExploreSession : ITab {
 						}, canExecute: () => !item.HasProp(IS_LOCKED));
 						goto Done;
 					}
-					if(item.GetProp<RepoCtx>(IN_REPOSITORY, out var pair)) {
+					if(item.GetProp<RepoItem>(IN_REPOSITORY, out var pair)) {
 						var (root, local) = pair;
 
 						IEnumerable<string> Paths () {
@@ -645,9 +645,12 @@ public class ExploreSession : ITab {
 		
 	}
 	public IEnumerable<int> GetMarkedIndex () =>
-				Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
+		Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
 	public IEnumerable<PathItem> GetMarkedItems () =>
 		GetMarkedIndex().Select(i => cwdData[i]);
+
+	/// <param name="path">This is strictly a child of cwd.</param>
+	/// <remarks>Strictly called after <see cref="RefreshRepo(string)"/>, so we already know repo props for the parent directory.</remarks>
 	IEnumerable<IProp> GetProps (string path) {
 		if(fx.locked.Contains(path)) {
 			yield return IS_LOCKED;
@@ -671,26 +674,9 @@ public class ExploreSession : ITab {
 				yield return IS_ZIP;
 			}
 
-			RepoCtx repoCtx;
-			if(pathData.TryGetValue(path, out var it) && it.GetProp<RepoCtx>(IN_REPOSITORY, out repoCtx, out var pr) && Repository.IsValid(repoCtx.root)) {
-				yield return pr;
-			}
-			var parent = Path.GetDirectoryName(path);
-			Repository repo;
-			
-			if(pathData.TryGetValue(parent, out var parItem) && parItem.HasProp(IS_REPOSITORY)) {
-				(repo, repoCtx) = GetRepo(parItem.path);
-				goto RepoFound;
-			} else if(parItem.GetProp(IN_REPOSITORY, out repoCtx)) {
-				(repo, repoCtx) = GetRepo(repoCtx.root);
-				goto RepoFound;
-			} else {
-				goto NoRepo;
-			}
-			RepoFound:
-			yield return ((PropGen<RepoCtx>)IN_REPOSITORY).Generate(repoCtx);
-			NoRepo:
-			int i = 0;
+
+			//yield return IN_REPOSITORY;
+
 		}
 		if(gitMap.TryGetValue(path, out var p)) {
 			if(p.staged) {
@@ -700,7 +686,6 @@ public class ExploreSession : ITab {
 			}
 		}
 	}
-
 	PathItem GetPathItem (string path) {
 		if(!pathData.TryGetValue(path, out var item)) {
 			item = new(Path.GetFileName(path), path, new());
@@ -709,7 +694,35 @@ public class ExploreSession : ITab {
 			propertySet = GetProps(path).ToHashSet()
 		};
 	}
-
+	/// <summary>
+	/// Do not check directory properties here as this is where we assign properties to begin with.
+	/// </summary>
+	/// <param name="path"></param>
+	private void RefreshRepo (string path) {
+		if(git is { root: { } root }) {
+			var stillInRepo = path.StartsWith(root);
+			if(stillInRepo) {
+				//If we're in the repo but not at root, remember that this directory is within the repository
+				if(path != root && !pathData[path].HasProp(IN_REPOSITORY)) {
+					pathData[path].propertySet.Add(((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path)));
+				}
+				RefreshChanges();
+			} else {
+				gitData.Clear();
+				git?.Clear();
+				git = default;
+			}
+		} else if(Repository.IsValid(path)) {
+			//Mark this directory as a known repository.
+			pathData[path].propertySet.Add(IS_REPOSITORY);
+			SetRepo(path);
+			RefreshChanges();
+		} else if(pathData[path].GetProp<RepoItem>(IN_REPOSITORY, out var repoFile) && Repository.IsValid(repoFile.root)) {
+			//We already know that this directory is within some repository from a previous visit.
+			SetRepo(repoFile.root);
+			RefreshChanges();
+		}
+	}
 	void RefreshListing (string s) {
 		try {
 			pathList.SetSource(cwdData = new List<PathItem>([
@@ -717,6 +730,27 @@ public class ExploreSession : ITab {
 				..Directory.GetFiles(s).Select(GetPathItem)
 			]));
 		}catch(UnauthorizedAccessException e) {
+		}
+	}
+	public void RefreshChanges () {
+		IEnumerable<GitItem> GetItems () {
+			foreach(var item in git.repo.RetrieveStatus()) {
+				GitItem GetItem (bool staged) => new GitItem(item.FilePath, Path.GetFullPath($"{git.root}/{item.FilePath}"), staged);
+				if(item.State switch {
+					FileStatus.ModifiedInIndex => GetItem(true),
+					FileStatus.ModifiedInWorkdir => GetItem(false),
+					_ => null
+				} is { } it) {
+					yield return it;
+				}
+			}
+		}
+		var items = GetItems().ToList();
+		gitMap = items.ToDictionary(item => item.path);
+		gitData = items;
+		gitList.SetSource(gitData);
+		foreach(var (i, it) in gitData.Index()) {
+			gitList.Source.SetMark(i, it.staged);
 		}
 	}
 	void RefreshAddressBar () {
@@ -738,25 +772,22 @@ public class ExploreSession : ITab {
 		pathList.SetNeedsDisplay();
 	}
 	void RefreshCwd () {
-		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
-		RefreshListing(fx.cwd);
-		if(pathData[fx.cwd].GetProp(IN_REPOSITORY, out RepoCtx repoCtx)) {
-
+		var path = fx.cwd;
+		fx.lastIndex[path] = pathList.SelectedItem;
+		//Refresh the repo in case it got deleted for some reason
+		RefreshRepo(path);
+		RefreshListing(path);
+		if(pathData[fx.cwd].HasProp(IN_REPOSITORY)) {
 			RefreshChanges();
 		}
 		RefreshAddressBar();
 	}
-	void SetCwd (string s) {
-		RefreshListing(s);
-
-		/*
-		if(s == cwd) {
-			goto UpdateListing;
-		}
-		*/
+	void SetCwd (string dest) {
+		var path = Path.GetFullPath(dest);
+		RefreshRepo(path);
+		RefreshListing(path);
 		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
-		fx.cwd = Path.GetFullPath(s);
-		RefreshGit();
+		fx.cwd = path;
 		RefreshAddressBar();
 	}
 	bool GoPath (string? dest) {
@@ -789,43 +820,6 @@ public class ExploreSession : ITab {
 			curr = Path.GetDirectoryName(curr);
 		}
 	}
-	private void RefreshGit () {
-		//Replace with property check?
-		if(git is { root: { } root, repo: { } repo }) {
-			if(StillInRepo()) {
-				RefreshChanges();
-			} else {
-				gitData.Clear();
-				git = (null, null);
-			}
-			return;
-		}
-		if(pathData[fx.cwd].HasProp(IS_REPOSITORY)) {
-			SetRepo(fx.cwd);
-			RefreshChanges();
-		}
-	}
-	public void RefreshChanges () {
-		IEnumerable<GitItem> GetItems () {
-			foreach(var item in git.repo.RetrieveStatus()) {
-				GitItem GetItem (bool staged) => new GitItem(item.FilePath, Path.GetFullPath($"{git.root}/{item.FilePath}"), staged);
-				if(item.State switch {
-					FileStatus.ModifiedInIndex => GetItem(true),
-					FileStatus.ModifiedInWorkdir => GetItem(false),
-					_ => null
-				} is { } it) {
-					yield return it;
-				}
-			}
-		}
-		var items = GetItems().ToList();
-		gitMap = items.ToDictionary(item => item.path);
-		gitData = items;
-		gitList.SetSource(gitData);
-		foreach(var (i, it) in gitData.Index()) {
-			gitList.Source.SetMark(i, it.staged);
-		}
-	}
 	bool GetItem (out PathItem p) {
 		p = null;
 		if(pathList.SelectedItem >= cwdData.Count) {
@@ -851,26 +845,20 @@ public class ExploreSession : ITab {
 		});
 		Application.Run(d);
 	}
-
-	(Repository repo, RepoCtx repoCtx) GetRepo (string root) {
-		if(!ctx.repos.TryGetValue(root, out var repo)) {
-			ctx.repos[root] = repo = new Repository(root);
-		}
-		var repoCtx = repo.GetRepoCtx(root);
-		return (repo, repoCtx);
-	}
-	private bool StillInRepo () => fx.cwd.StartsWith(git.root);
 	private void SetRepo(string root) {
-		if(!ctx.repos.TryGetValue(root, out var repo)) {
-			ctx.repos[root] = repo = new Repository(root);
-		}
-		git = (root, repo);
+		git = new(root, new Repository(root));
 	}
 }
 public interface IProp {
 	string id { get; }
 	string desc { get; }
 }
+/// <summary>
+/// Standard properties used within fx
+/// </summary>
+/// <remarks>
+/// Be careful not to assign <see cref="IS_REPOSITORY"/> or <see cref="IN_REPOSITORY"/> outside <see cref="ExploreSession.RefreshRepo(string)"/>. The repository is updated before the cwd listing.
+/// </remarks>
 public static class Props {
 	public static IProp
 		IS_LOCKED =		new Prop("locked", "Locked"),
@@ -878,11 +866,11 @@ public static class Props {
 		IS_STAGED =		new Prop("gitStagedChanges", "- Staged Changes"),
 		IS_UNSTAGED =	new Prop("gitUnstagedChanges", "- Unstaged Changes"),
 		IS_SOLUTION =	new Prop("visualStudioSolution", "Visual Studio Solution"),
-		IS_REPOSITORY = new Prop("gitRepository", "Git Repository"),
+		IS_REPOSITORY = new Prop("gitRepositoryRoot", "Git Repository"),
 		IS_ZIP =		new Prop("zipArchive", "Zip Archive");
 	public static IPropGen
+		IN_REPOSITORY = new PropGen<RepoItem>("gitRepositoryItem", pair => $"In Repository: {pair.root}"),
 		IS_LINK_TO =	new PropGen<string>	("link",				dest => $"Link To: {dest}"),
-		IN_REPOSITORY = new PropGen<RepoCtx>("gitRepositoryItem",	pair => $"In Repository: {pair.root}"),
 		IN_LIBRARY =	new PropGen<Library>("libraryItem",			library => $"In Library: {library.name}"),
 		IN_SOLUTION =	new PropGen<string>	("solutionItem",		solutionPath => $"In Solution: {solutionPath}"),
 		IN_ZIP =		new PropGen<string>	("zipItem",				zipRoot => $"In Zip: {zipRoot}");
@@ -890,12 +878,13 @@ public static class Props {
 	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
 	public static string GetRepoLocal (this Repository repo, string path) => path.Replace(repo.GetRoot() + Path.DirectorySeparatorChar, null);
 
-	public static RepoCtx GetRepoCtx(this Repository repo, string path) {
+	public static RepoItem CalcRepoItem(this Repository repo, string path) {
 		var root = repo.GetRoot();
 		var local = path.Replace(root + Path.DirectorySeparatorChar, null);
 		return new(root, local);
 	}
-	public record RepoCtx (string root, string local) {}
+	/// <summary>Identifies a repository-contained file by local path and repository root</summary>
+	public record RepoItem (string root, string local) {}
 }
 public record Prop (string id, string desc) : IProp {
 }
@@ -949,4 +938,11 @@ public record PathItem (string local, string path, HashSet<IProp> propertySet) {
 }
 public record GitItem (string local, string path, bool staged) {
 	public override string ToString () => $"{Path.GetFileName(local)}";
+}
+
+public record RepoPtr (string root, Repository repo) {
+	public void Clear () {
+		repo.Dispose();
+
+	}
 }

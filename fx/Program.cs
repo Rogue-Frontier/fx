@@ -223,10 +223,6 @@ public record Ctx {
 	private Deserializer de { get; } = new Deserializer();
 	private Serializer se { get; } = new Serializer();
 	public Command[] Commands { get; private set; }
-
-
-	public Dictionary<string, Repository> repos = new();
-
 	public Sln sln;
 	public Fx fx = new();
 	public Ctx () {
