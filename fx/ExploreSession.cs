@@ -17,6 +17,7 @@ using System.Threading;
 using Microsoft.Build.Construction;
 using System.Reflection.Metadata.Ecma335;
 using static fx.Props;
+using System.Collections.Concurrent;
 namespace fx;
 public class ExploreSession : ITab {
 	public string TabName => "Explore";
@@ -27,8 +28,8 @@ public class ExploreSession : ITab {
 	private Ctx ctx;
 	private Fx fx => ctx.fx;
 
-	//Persistent data
-	Dictionary<string, PathItem> pathData = new();
+	//Keep old data around since we might use the properties
+	ConcurrentDictionary<string, PathItem> pathData = new();
 	
 	/// <summary>Temporary</summary>
 	private List<PathItem> cwdData = new();
@@ -502,6 +503,10 @@ public class ExploreSession : ITab {
 						}, canExecute: () => !item.HasProp(IS_LOCKED));
 						goto Done;
 					}
+
+					var parItem = GetPathItem(Path.GetDirectoryName(item.path));
+
+
 					if(item.GetProp<RepoItem>(IN_REPOSITORY, out var pair)) {
 						var (root, local) = pair;
 
@@ -687,24 +692,26 @@ public class ExploreSession : ITab {
 		}
 	}
 	PathItem GetPathItem (string path) {
-		if(!pathData.TryGetValue(path, out var item)) {
-			item = new(Path.GetFileName(path), path, new());
-		}
-		return pathData[path] = item with {
-			propertySet = GetProps(path).ToHashSet()
-		};
+		return pathData[path] =
+			pathData.TryGetValue(path, out var item) ?
+				new PathItem(item.local, item.path, new(GetProps(path))) :
+				new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
 	}
 	/// <summary>
 	/// Do not check directory properties here as this is where we assign properties to begin with.
 	/// </summary>
 	/// <param name="path"></param>
 	private void RefreshRepo (string path) {
+		var item = GetPathItem(path);
 		if(git is { root: { } root }) {
 			var stillInRepo = path.StartsWith(root);
 			if(stillInRepo) {
 				//If we're in the repo but not at root, remember that this directory is within the repository
-				if(path != root && !pathData[path].HasProp(IN_REPOSITORY)) {
-					pathData[path].propertySet.Add(((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path)));
+				if(path != root && !item.HasProp(IN_REPOSITORY)) {
+					var add = ((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path));
+
+					//TO DO: fix adding attributes
+					pathData[path] = item with { propertySet = new([..item.propertySet, add]) };
 				}
 				RefreshChanges();
 			} else {
@@ -714,13 +721,18 @@ public class ExploreSession : ITab {
 			}
 		} else if(Repository.IsValid(path)) {
 			//Mark this directory as a known repository.
-			pathData[path].propertySet.Add(IS_REPOSITORY);
+			pathData[path] = item with { propertySet = new([.. item.propertySet, IS_REPOSITORY]) };
 			SetRepo(path);
 			RefreshChanges();
-		} else if(pathData[path].GetProp<RepoItem>(IN_REPOSITORY, out var repoFile) && Repository.IsValid(repoFile.root)) {
-			//We already know that this directory is within some repository from a previous visit.
-			SetRepo(repoFile.root);
-			RefreshChanges();
+		} else if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoFile, out var prop)) {
+			if(Repository.IsValid(repoFile.root)) {
+				//We already know that this directory is within some repository from a previous visit.
+				SetRepo(repoFile.root);
+				RefreshChanges();
+			} else {
+				//Error
+				pathData[path] = item with { propertySet = new(item.propertySet.Except([prop])) };
+			}
 		}
 	}
 	void RefreshListing (string s) {
@@ -883,15 +895,24 @@ public static class Props {
 		var local = path.Replace(root + Path.DirectorySeparatorChar, null);
 		return new(root, local);
 	}
+	public static bool HasRepo(PathItem item, out string root) {
+		if(item.HasProp(IS_REPOSITORY)) {
+			root = item.path;
+			return true;
+		}
+		if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoItem)) {
+			root = repoItem.root;
+			return true;
+		}
+		root = null;
+		return false;
+	}
+
 	/// <summary>Identifies a repository-contained file by local path and repository root</summary>
 	public record RepoItem (string root, string local) {}
 }
-public record Prop (string id, string desc) : IProp {
-}
-public record Prop<T> (string id, string desc, T data) : IProp {
-
-}
-
+public record Prop (string id, string desc) : IProp {}
+public record Prop<T> (string id, string desc, T data) : IProp {}
 public interface IPropGen {
 	string id { get; }
 }
@@ -899,14 +920,12 @@ public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
 	public delegate string GetDesc (T args);
 	public Prop<T> Generate (T args) => new Prop<T>(id, getDesc(args), args);
 }
-
 public record ProcItem (Process p) {
 	public override string ToString () => $"{p.ProcessName,-24}{p.Id,-8}";
 }
 public record PathItem (string local, string path, HashSet<IProp> propertySet) {
 	public readonly Dictionary<string, IProp> propertyDict =
-		(propertySet ?? new())
-		.ToDictionary(p => p.id, p => p);
+		propertySet?.ToDictionary(p => p.id, p => p);
 	public bool HasProp (IProp p) => propertySet.Contains(p);
 	public bool HasProp (IPropGen p) => propertyDict.ContainsKey(p.id);
 	public bool HasProp<T> (IPropGen p, T data) where T : notnull => propertyDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
@@ -939,10 +958,8 @@ public record PathItem (string local, string path, HashSet<IProp> propertySet) {
 public record GitItem (string local, string path, bool staged) {
 	public override string ToString () => $"{Path.GetFileName(local)}";
 }
-
 public record RepoPtr (string root, Repository repo) {
 	public void Clear () {
 		repo.Dispose();
-
 	}
 }
