@@ -130,7 +130,6 @@ public class FindSession : ITab {
 				main.EditFile(l);
 			}
 		};
-
 		root.AddKey(new() {
 			[Key.DeleteChar] = () => {
 				int i = 0;
@@ -153,8 +152,35 @@ public class FindSession : ITab {
 		findBar.AddKey(new() {
 			[Key.Enter] = FindLines
 		});
+
+
 		rootShowButton.Clicked += FindDirs;
 		filterShowButton.Clicked += FindFiles;
+
+
+		tree.AddMouse(new() {
+			[MouseFlags.Button3Clicked] = e => {
+				
+				tree.SelectedObject = tree.GetObjectOnRow(e.MouseEvent.Y);
+				tree.SetNeedsDisplay();
+			},
+		});
+		tree.AddKey(new() {
+			[Key.CursorRight] = () => {
+				if(!tree.IsExpanded(tree.SelectedObject)) {
+					if(!tree.CanExpand(tree.SelectedObject)) {
+						return;
+					}
+					tree.Expand(tree.SelectedObject);
+					tree.SetNeedsDisplay();
+					return;
+				}
+				if(tree.GetChildren(tree.SelectedObject).FirstOrDefault() is { } c) {
+					tree.SelectedObject = c;
+				}
+				tree.SetNeedsDisplay();
+			}
+		});
 		void FindFiles () {
 			filter = filter with {
 				filePattern = new(filterBar.Text.ToString()),

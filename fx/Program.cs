@@ -497,16 +497,27 @@ public record Config (Dictionary<string, string> programs = null, Command[] comm
 public static class SView {
 
 	public static void AddKey (this View v, Dictionary<Key, Action> key, Dictionary<int, Action> value = null) =>
-		v.KeyPress += e => (
-			key.TryGetValue(e.KeyEvent.Key, out var a) ?
-				a :
-			value?.TryGetValue(e.KeyEvent.KeyValue, out a) == true ?
-				a :
-				null
-		)?.Invoke();
+		v.KeyPress += e => {
+
+			var action =
+				key.TryGetValue(e.KeyEvent.Key, out var a) ?
+					a :
+				value?.TryGetValue(e.KeyEvent.KeyValue, out a) == true ?
+					a :
+					null;
+			e.Set(action != null);
+			action ?.Invoke ();
+		};
 
 	public static void AddMouse (this View v, Dictionary<MouseFlags, Action<MouseEventArgs>> dict) =>
-		v.MouseClick += e => (dict.TryGetValue(e.MouseEvent.Flags, out var a) ? a : null)?.Invoke(e);
+		v.MouseClick += e => {
+			var action =
+				dict.TryGetValue(e.MouseEvent.Flags, out var a) ?
+					a :
+					null;
+			e.Set(action != null);
+			action?.Invoke(e);
+		};
 
 	public static void AddKeyPress (this View v, KeyEvent f) =>
 		v.KeyPress += e => Run(e, d => f(d));
