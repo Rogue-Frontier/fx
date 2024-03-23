@@ -16,6 +16,7 @@ using static Ctx;
 using System.Threading;
 using Microsoft.Build.Construction;
 using System.Reflection.Metadata.Ecma335;
+using static fx.Props;
 namespace fx;
 public class ExploreSession : ITab {
 	public string TabName => "Explore";
@@ -431,7 +432,7 @@ public class ExploreSession : ITab {
 					yield return new MenuItem("Find", null, () => {
 						main.FindIn(item.path);
 					});
-					if(item.HasProp(Props.IS_DIRECTORY)) {
+					if(item.HasProp(IS_DIRECTORY)) {
 						yield return new MenuItem("Remember", "", () => cwdRecall = item.path);
 						yield return new MenuItem("Open in Explorer", "", () => RunProc($"explorer.exe {item.path}"));
 						yield return new MenuItem("New File", "", () => {
@@ -465,7 +466,7 @@ public class ExploreSession : ITab {
 							name.SetFocus();
 							Application.Run(d);
 
-						}, canExecute: () => !item.HasProp(Props.IS_LOCKED));
+						}, canExecute: () => !item.HasProp(IS_LOCKED));
 						yield return new MenuItem("New Directory", "", () => {
 							var create = new Button("Create") { Enabled = false };
 							var cancel = new Button("Cancel");
@@ -496,30 +497,34 @@ public class ExploreSession : ITab {
 							d.Add(name);
 							name.SetFocus();
 							Application.Run(d);
-						}, canExecute: () => !item.HasProp(Props.IS_LOCKED));
+						}, canExecute: () => !item.HasProp(IS_LOCKED));
 						goto Done;
 					}
-					if(item.GetProp<(Repository repo, string local)>(Props.IN_REPOSITORY, out var pair)) {
-						var (repo, local) = pair;
+					if(item.GetProp<RepoCtx>(IN_REPOSITORY, out var pair)) {
+						var (root, local) = pair;
 
 						IEnumerable<string> Paths () {
 							yield return local;
 						}
-
 						var diff = new MenuItem("Diff", "", () => {
-							var patch = repo.Diff.Compare<Patch>(Paths());
-							Preview($"Diff: {item.path}", patch.Content);
+							using(var repo = new Repository(root)) {
+								var patch = repo.Diff.Compare<Patch>(Paths());
+								Preview($"Diff: {item.path}", patch.Content);
+							}
 						});
-
-						if(item.HasProp(Props.IS_UNSTAGED)) {
+						if(item.HasProp(IS_UNSTAGED)) {
 							yield return new MenuItem("Stage", "", () => {
-								Commands.Stage(repo, local);
+								using(var repo = new Repository(root)) {
+									Commands.Stage(repo, local);
+								}
 								RefreshCwd();
 							});
 							yield return diff;
-						} else if(item.HasProp(Props.IS_STAGED)) {
+						} else if(item.HasProp(IS_STAGED)) {
 							yield return new MenuItem("Unstage", "", () => {
-								Commands.Unstage(repo, local);
+								using(var repo = new Repository(root)) {
+									Commands.Unstage(repo, local);
+								}
 								RefreshCwd();
 							});
 							yield return diff;
@@ -573,16 +578,16 @@ public class ExploreSession : ITab {
 				}
 				Go(cwdData[pathList.SelectedItem]);
 				void Go (PathItem i) {
-					if(i.propertySet.Contains(Props.IS_LOCKED)) {
+					if(i.propertySet.Contains(IS_LOCKED)) {
 						return;
 					}
-					if(i.propertyDict.TryGetValue(Props.IS_LINK_TO.id, out var link)) {
+					if(i.propertyDict.TryGetValue(IS_LINK_TO.id, out var link)) {
 						var dest = ((Prop<string>)link).data;
 						var destItem = CreatePathItem(dest);
 						Go(destItem);
 						return;
 					}
-					if(i.propertyDict.ContainsKey(Props.IS_ZIP.id)) {
+					if(i.propertyDict.ContainsKey(IS_ZIP.id)) {
 						using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
 							foreach(ZipArchiveEntry entry in zip.Entries) {
 								Debug.Print(entry.FullName);
@@ -590,7 +595,7 @@ public class ExploreSession : ITab {
 						}
 						return;
 					}
-					if(i.propertySet.Contains(Props.IS_DIRECTORY)) {
+					if(i.propertySet.Contains(IS_DIRECTORY)) {
 						GoPath(i.path);
 						return;
 					}
@@ -643,36 +648,41 @@ public class ExploreSession : ITab {
 		GetMarkedIndex().Select(i => cwdData[i]);
 	IEnumerable<IProp> GetProps (string path) {
 		if(fx.locked.Contains(path)) {
-			yield return Props.IS_LOCKED;
+			yield return IS_LOCKED;
 		}
 		if(Directory.Exists(path)) {
-			yield return Props.IS_DIRECTORY;
-
-			if(ctx.git?.root == path) {
-				yield return Props.IS_REPOSITORY;
+			yield return IS_DIRECTORY;
+			if(Repository.IsValid(path)) {
+				yield return IS_REPOSITORY;
 			}
 		} else {
 			if(path.EndsWith(".sln")) {
-				yield return Props.IS_SOLUTION;
+				yield return IS_SOLUTION;
 			}
 			if(path.EndsWith(".lnk")) {
 				// WshShellClass shell = new WshShellClass();
 				WshShell shell = new WshShell(); //Create a new WshShell Interface
 				IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
-				yield return ((PropGen<string>)Props.IS_LINK_TO).Generate(link.TargetPath);
+				yield return ((PropGen<string>)IS_LINK_TO).Generate(link.TargetPath);
 			}
 			if(path.EndsWith(".zip")) {
-				yield return Props.IS_ZIP;
+				yield return IS_ZIP;
 			}
-			if(ctx.git is { }) {
-				yield return ((PropGen<(Repository repo, string local)>)Props.IN_REPOSITORY).Generate((ctx.git.repo, ctx.git.GetRepoLocal(path)));
+
+			/*
+			if(Path.GetDirectoryName(path) is Repository) {
+
+			}
+			*/
+			if(ctx.git is {}) {
+				yield return ((PropGen<(Repository repo, string local)>)IN_REPOSITORY).Generate((ctx.git.repo, ctx.git.GetRepoLocal(path)));
 			}
 		}
 		if(gitMap.TryGetValue(path, out var p)) {
 			if(p.staged) {
-				yield return Props.IS_STAGED;
+				yield return IS_STAGED;
 			} else {
-				yield return Props.IS_UNSTAGED;
+				yield return IS_UNSTAGED;
 			}
 		}
 
@@ -698,7 +708,7 @@ public class ExploreSession : ITab {
 			userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
 		}
 		if(anonymize) {
-			showCwd = showCwd.Replace(userProfile, Ctx.USER_PROFILE_MASK);
+			showCwd = showCwd.Replace(userProfile, USER_PROFILE_MASK);
 		}
 		//Anonymize
 		addressBar.Text = showCwd;
@@ -752,19 +762,11 @@ public class ExploreSession : ITab {
 			(goLeft, Up()), (goNext, fx.cwdNext), (goPrev, fx.cwdPrev)
 		]);
 	private IEnumerable<string> Up () {
-		string
-			p = fx.cwd,
-			prev = p;
-		Up:
-		p = Path.Combine(p, "..");
-		if(!Directory.Exists(p))
-			yield break;
-		var full = Path.GetFullPath(p);
-		if(full == prev)
-			yield break;
-		prev = full;
-		yield return full;
-		goto Up;
+		var curr = Path.GetDirectoryName(fx.cwd);
+		while(curr != null) {
+			yield return curr;
+			curr = Path.GetDirectoryName(curr);
+		}
 	}
 	private void RefreshGit () {
 		//Replace with property check?
@@ -785,7 +787,6 @@ public class ExploreSession : ITab {
 		}
 	}
 	public void RefreshChanges () {
-		
 		IEnumerable<GitItem> GetItems () {
 			foreach(var item in ctx.git.repo.RetrieveStatus()) {
 				GitItem GetItem (bool staged) => new GitItem(item.FilePath, Path.GetFullPath($"{ctx.git.root}/{item.FilePath}"), staged);
@@ -831,4 +832,74 @@ public class ExploreSession : ITab {
 		});
 		Application.Run(d);
 	}
+}
+public interface IProp {
+	string id { get; }
+	string desc { get; }
+}
+public static class Props {
+	public static IProp
+		IS_LOCKED =		new Prop("locked", "Locked"),
+		IS_DIRECTORY =	new Prop("directory", "Directory"),
+		IS_STAGED =		new Prop("gitStagedChanges", "- Staged Changes"),
+		IS_UNSTAGED =	new Prop("gitUnstagedChanges", "- Unstaged Changes"),
+		IS_SOLUTION =	new Prop("visualStudioSolution", "Visual Studio Solution"),
+		IS_REPOSITORY = new Prop("gitRepository", "Git Repository"),
+		IS_ZIP =		new Prop("zipArchive", "Zip Archive");
+	public static IPropGen
+		IS_LINK_TO =	new PropGen<string>	("link",				dest => $"Link To: {dest}"),
+		IN_REPOSITORY = new PropGen<RepoCtx>("gitRepositoryItem",	pair => $"In Repository: {pair.root}"),
+		IN_LIBRARY =	new PropGen<Library>("libraryItem",			library => $"In Library: {library.name}"),
+		IN_SOLUTION =	new PropGen<string>	("solutionItem",		solutionPath => $"In Solution: {solutionPath}"),
+		IN_ZIP =		new PropGen<string>	("zipItem",				zipRoot => $"In Zip: {zipRoot}");
+
+	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
+
+	public record RepoCtx (string root, string name) {}
+}
+public record Prop (string id, string desc) : IProp {
+}
+public record Prop<T> (string id, string desc, T data) : IProp {
+
+}
+
+public interface IPropGen {
+	string id { get; }
+}
+public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
+	public delegate string GetDesc (T args);
+	public Prop<T> Generate (T args) => new Prop<T>(id, getDesc(args), args);
+}
+
+public record ProcItem (Process p) {
+	public override string ToString () => $"{p.ProcessName,-24}{p.Id,-8}";
+}
+public record PathItem (string local, string path, HashSet<IProp> propertySet = null, string linkTarget = null) {
+	public readonly Dictionary<string, IProp> propertyDict =
+		(propertySet ?? new())
+		.ToDictionary(p => p.id, p => p);
+	public bool HasProp (IProp p) => propertySet.Contains(p);
+	public bool HasProp (IPropGen p) => propertyDict.ContainsKey(p.id);
+	public bool HasProp<T> (IPropGen p, T data) where T : notnull => propertyDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
+
+	public bool GetProp<T> (IPropGen p, out T data) {
+		data =
+			propertyDict.TryGetValue(p.id, out var prop) is { } b && b ?
+				((Prop<T>)prop).data :
+				default;
+		return b;
+	}
+	public T GetProp<T> (IPropGen p) => ((Prop<T>)propertyDict[p.id]).data;
+	public bool dir => HasProp(IS_DIRECTORY);
+	public bool isLocked => HasProp(IS_LOCKED);
+	//public string type => dir ? "📁" : "📄";
+	//public string locked => restricted ? "🔒" : " ";
+	public string tag => $"{local}{(dir ? "/" : " ")}";
+	public string locked => isLocked ? "~" : "";
+	public string staged => HasProp(IS_STAGED) ? "+" : HasProp(IS_UNSTAGED) ? "*" : "";
+	public string str => $"{tag,-24}{locked,-2}{staged,-2}";
+	public override string ToString () => str;
+}
+public record GitItem (string local, string path, bool staged) {
+	public override string ToString () => $"{Path.GetFileName(local)}";
 }

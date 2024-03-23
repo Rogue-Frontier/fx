@@ -3,8 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Terminal.Gui;
+using Terminal.Gui.Trees;
 
 namespace fx;
 public class FindSession : ITab {
@@ -225,4 +227,84 @@ public class FindSession : ITab {
 	}
 	string GetRoot () =>
 		rootBar.Text.ToString().Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE);
+}
+
+public record FindFilter (Regex filePattern, Regex linePattern, string replace) {
+	public bool Accept (FindFile f) => filePattern?.Match(f.name).Success ?? true;
+	public bool Accept (string line) => linePattern?.Match(line).Success ?? true;
+
+	public void Replace (string line) => linePattern.Replace(line, replace);
+}
+public record TreeFinder () : ITreeBuilder<IFind> {
+	public bool SupportsCanExpand => true;
+	public bool CanExpand (IFind f) => f switch {
+		FindDir or FindFile => f.GetLeaves().Any(),
+		_ => false
+	};
+	public IEnumerable<IFind> GetChildren (IFind f) {
+		return f.GetChildren();
+	}
+}
+public interface IFind {
+	bool IsMatch () => false;
+	IEnumerable<IFind> GetChildren ();
+	IEnumerable<FindLine> GetLeaves ();
+}
+public record FindDir (FindFilter filter, string path) : IFind {
+	public string name => Path.GetFileName(path);
+
+
+	private IEnumerable<IFind> GetDescendants (bool excludeFiles = false) {
+		foreach(var d in Directory.GetDirectories(path)) {
+			var fd = new FindDir(filter, d);
+			if(fd.GetLeaves().Any())
+				yield return fd;
+		}
+		if(excludeFiles) {
+			yield break;
+		}
+		foreach(var f in Directory.GetFiles(path)) {
+			var ff = new FindFile(filter, f);
+			if(filter.Accept(ff) && ff.GetLeaves().Any())
+				yield return ff;
+		}
+	}
+	public IEnumerable<IFind> GetChildren () => GetDescendants(filter.filePattern == null);
+	public IEnumerable<FindLine> GetLeaves () {
+		foreach(var c in GetDescendants()) {
+			foreach(var l in c.GetLeaves()) {
+				yield return l;
+			}
+		}
+	}
+}
+public record FindFile (FindFilter filter, string path) : IFind {
+	public string name => Path.GetFileName(path);
+	public IEnumerable<IFind> GetChildren () {
+		if(filter.linePattern != null) {
+			return GetLeaves();
+		}
+		return Enumerable.Empty<IFind>();
+
+	}
+	public IEnumerable<FindLine> GetLeaves () {
+		int row = 0;
+		foreach(var l in File.ReadLines(path)) {
+			row++;
+			var m = filter.linePattern?.Match(l);
+			if(m is { Success: true })
+				yield return new FindLine(path, row, m.Index, l.Replace("\t", "    "), m.Value);
+			else if(m == null) {
+				yield return null;
+			}
+		}
+	}
+}
+public record FindLine (string path, int row, int col, string line, string capture) : IFind {
+	public IEnumerable<IFind> GetChildren () {
+		yield break;
+	}
+	public IEnumerable<FindLine> GetLeaves () {
+		yield return this;
+	}
 }

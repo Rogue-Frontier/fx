@@ -9,9 +9,6 @@ namespace fx {
 	public interface ITab {
 		string TabName { get; }
 		View TabView { get; }
-
-	}
-	public static class STab {
-		public static TabView.Tab GetTab(this ITab session) => new TabView.Tab(session.TabName, session.TabView);
+		TabView.Tab GetTab() => new TabView.Tab(TabName, TabView);
 	}
 }

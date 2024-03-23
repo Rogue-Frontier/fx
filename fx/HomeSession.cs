@@ -7,7 +7,6 @@ using Terminal.Gui;
 
 namespace fx;
 public class HomeSession : ITab {
-
 	public string TabName => "Home";
 	public View TabView => root;
 	public View root;
@@ -84,4 +83,8 @@ public class HomeSession : ITab {
 			);
 		//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
 	}
+}
+public record Library (string name) {
+	public List<Link> links = new();
+	public record Link (string path, bool visible, bool expand);
 }
