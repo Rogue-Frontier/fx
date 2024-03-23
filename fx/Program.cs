@@ -23,6 +23,7 @@ using IWshRuntimeLibrary;
 using File = System.IO.File;
 using fx;
 using System.Reflection.Metadata;
+using static Terminal.Gui.View;
 Application.Init();
 try {
 	Application.UseSystemConsole = true;
@@ -395,7 +396,9 @@ public record PathItem (string local, string path, HashSet<IProp> propertySet = 
 	//public string type => dir ? "📁" : "📄";
 	//public string locked => restricted ? "🔒" : " ";
 	public string tag => $"{local}{(dir ? "/" : " ")}";
-	public string str => $"{tag,-24}{(isLocked ? "[~]" : "   ")}";
+	public string locked => isLocked ? "~" : "";
+	public string staged => HasProp(Props.IS_STAGED) ? "+" : HasProp(Props.IS_UNSTAGED) ? "*" : "";
+	public string str => $"{tag,-24}{locked, -2}{staged, -2}";
 	public override string ToString () => str;
 }
 public record GitItem (string local, string path, bool staged) {
@@ -492,29 +495,26 @@ public record Config (Dictionary<string, string> programs = null, Command[] comm
 	public Config () : this(null, null) { }
 }
 public static class SView {
-	public static void AddKeyPress (this View v, KeyEvent f) {
-		/*
-		v.KeyPress += e => {
-			var a = f(e);
-			e.Handled = a != null;
-			a?.Invoke();
-		};
-		*/
+
+	public static void AddKey (this View v, Dictionary<Key, Action> key, Dictionary<int, Action> value = null) =>
+		v.KeyPress += e => (
+			key.TryGetValue(e.KeyEvent.Key, out var a) ?
+				a :
+			value?.TryGetValue(e.KeyEvent.KeyValue, out a) == true ?
+				a :
+				null
+		)?.Invoke();
+
+	public static void AddMouse (this View v, Dictionary<MouseFlags, Action<MouseEventArgs>> dict) =>
+		v.MouseClick += e => (dict.TryGetValue(e.MouseEvent.Flags, out var a) ? a : null)?.Invoke(e);
+
+	public static void AddKeyPress (this View v, KeyEvent f) =>
 		v.KeyPress += e => Run(e, d => f(d));
-	}
-	public static void AddMouseClick (this View v, MouseEvent f) {
-		/*
-		v.MouseClick += e => {
-			var a = f(e);
-			e.Handled = a != null;
-			a?.Invoke();
-		};
-		*/
+	public static void AddMouseClick (this View v, MouseEvent f) =>
 		v.MouseClick += e => Run(e, d => f(d));
-	}
 	private static void Run (dynamic e, Func<dynamic, Action> f) {
 		Action a = f(e);
-		e.Handled = a != null;
+		e.Handled = (a != null);
 		a?.Invoke();
 	}
 	public static void InitTree (params View[][] tree) {
@@ -523,7 +523,6 @@ public static class SView {
 		}
 	}
 	public static void ForTuple<T, U> (T action, params U[] arr) where T : Delegate {
-
 		var fields = typeof(U).GetFields();
 		Type[] pars = [.. fields.Select(field => field.GetType())];
 		foreach(var row in arr) {
@@ -531,7 +530,14 @@ public static class SView {
 			action.DynamicInvoke(args);
 		}
 	}
-
+	public static void Set (this MouseEventArgs e, bool b = true) => e.Handled = b;
+	public static void Set (this KeyEventEventArgs e, bool b = true) => e.Handled = b;
+	/*
+	public static void Handle (this MouseEventArgs e, Func<bool> f) => e.Handled = f();
+	public static void Handle (this KeyEventEventArgs e, Func<bool> f) => e.Handled = f();
+	public static void Handle (this MouseEventArgs e, Func<MouseEventArgs, bool> f) => e.Handled = f(e);
+	public static void Handle (this KeyEventEventArgs e, Func<KeyEventEventArgs, bool> f) => e.Handled = f(e);
+	*/
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
 }
 public delegate Action? KeyEvent (View.KeyEventEventArgs e);

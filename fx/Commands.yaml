@@ -6,6 +6,7 @@
       - dir:
         - name: .git
         - name: .github
+  #tag: GitHub Repository
 - name: Run C# Project
   fmt: dotnet run --project {0}
   targetAny:
@@ -14,6 +15,7 @@
           - ext: csproj
     file:
       - ext: csproj
+  #tag: C# Project
 - name: Public C# Project
   fmt: dotnet publish --project {0}
   targetAny:
@@ -22,6 +24,7 @@
           - ext: csproj
     file:
       - ext: csproj
+  #tag: C# Project
 - name: Open Solution in Visual Studio
   targetAny:
     dir:
@@ -29,6 +32,7 @@
           - ext: sln
     file:
       - ext: sln
+  #tag: Solution
 - name: Run C# Script
   program: cx
   targetAny:

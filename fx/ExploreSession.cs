@@ -200,8 +200,6 @@ public class ExploreSession : ITab {
 		InitCwd();
 		RefreshButtons();
 		UpdateProcesses();
-
-
 		void InitTreeLocal () {
 			SView.InitTree(
 				[freqPane, freqList],
@@ -213,35 +211,29 @@ public class ExploreSession : ITab {
 				);
 		}
 		void InitEvents () {
-			goPrev.AddMouseClick(e => e.MouseEvent.Flags switch {
-				MouseFlags.Button3Clicked => new ContextMenu(e.MouseEvent.View, new(
-					[.. fx.cwdPrev.Select((p, i) => new MenuItem(p, "", () => GoPrev(i + 1)))])).Show,
-				MouseFlags.Button1Clicked => () => e.Handled = GoPrev(),
-				_ => null,
+			goPrev.AddMouse(new() {
+				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
+					[.. fx.cwdPrev.Select((p, i) => new MenuItem(p, "", () => GoPrev(i + 1)))])).Show(),
+				[MouseFlags.Button1Clicked] = e => e.Set(GoPrev())
 			});
-			goNext.AddMouseClick(e => e.MouseEvent.Flags switch {
-				MouseFlags.Button3Clicked => new ContextMenu(e.MouseEvent.View, new(
-					[.. fx.cwdNext.Select((p, i) => new MenuItem(p, "", () => GoNext(i + 1)))])).Show,
-				MouseFlags.Button1Clicked => () => e.Handled = GoNext(),
-				_ => null
+			goNext.AddMouse(new() {
+				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
+					[.. fx.cwdNext.Select((p, i) => new MenuItem(p, "", () => GoNext(i + 1)))])).Show(),
+				[MouseFlags.Button1Clicked] = e => e.Set(GoNext())
 			});
-			goLeft.AddMouseClick(e => e.MouseEvent.Flags switch {
-				MouseFlags.Button3Clicked => new ContextMenu(e.MouseEvent.View, new(
-					[.. Up().Select(p => new MenuItem(p, "", () => GoPath(p)))])).Show,
-				MouseFlags.Button1Clicked => () => e.Handled = GoLeft(),
-				_ => null
+			goLeft.AddMouse(new() {
+				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
+					[.. Up().Select(p => new MenuItem(p, "", () => GoPath(p)))])).Show(),
+				[MouseFlags.Button1Clicked] = e => e.Set(GoLeft())
 			});
-			pathList.AddMouseClick(e => e.MouseEvent.Flags switch {
-				MouseFlags.Button3Clicked => () => {
+			pathList.AddMouse(new() {
+				[MouseFlags.Button3Clicked] = e => {
 					var prev = pathList.SelectedItem;
 					var i = pathList.TopItem + e.MouseEvent.Y;
-					if(i >= cwdData.Count) {
+					if(i >= cwdData.Count)
 						return;
-					}
 					var c = ShowContext(cwdData[i]);
 				}
-				,
-				_ => null
 			});
 			pathList.OpenSelectedItem += e => GoItem();
 			pathList.AddKeyPress(e => {
@@ -315,8 +307,7 @@ public class ExploreSession : ITab {
 							if(!fx.locked.Remove(p.path)) {
 								fx.locked.Add(p.path);
 							}
-							SetCwd(fx.cwd);
-							pathList.SetNeedsDisplay();
+							RefreshCwd();
 						}
 						,
 						'!' => () => {
@@ -369,10 +360,11 @@ public class ExploreSession : ITab {
 					}
 				};
 			});
-			procList.AddKeyPress(e => e.KeyEvent.Key switch {
-				Key.CursorLeft or Key.CursorRight => () => { }
-				,
-				Key.Backspace => () => {
+
+			procList.AddKey(new() {
+				[Key.CursorLeft] = default,
+				[Key.CursorRight] = default,
+				[Key.Backspace] = () => {
 					if(!(procList.SelectedItem < procData.Count))
 						return;
 					var p = procData[procList.SelectedItem];
@@ -380,11 +372,8 @@ public class ExploreSession : ITab {
 					procData.Remove(p);
 					procList.SetNeedsDisplay();
 				}
-				,
-				_ => e.KeyEvent.KeyValue switch {
-					'\'' => UpdateProcesses,
-					_ => null
-				}
+			}, new() {
+				['\''] = UpdateProcesses
 			});
 
 			gitList.OpenSelectedItem += e => {
@@ -395,13 +384,12 @@ public class ExploreSession : ITab {
 				gitList.SelectedItem = e.Item;
 			};
 
-			gitList.AddMouseClick(e => e.MouseEvent.Flags switch {
-				MouseFlags.Button1Clicked => () => {
+
+			gitList.AddMouse(new() {
+				[MouseFlags.Button1Clicked] = e => {
 					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
 					gitList.SetNeedsDisplay();
 				}
-				,
-				_ => null
 			});
 
 			/*
@@ -414,14 +402,14 @@ public class ExploreSession : ITab {
 				_ => null
 			});
 			*/
-			void ShowProperties (PathItem path) {
-				var d = new Dialog("Properties", []) {
+			void ShowProperties (PathItem item) {
+				var d = new Dialog($"Properties: {item.path}", []) {
 					Border = {
 						Effect3D = false
 					}
 				};
 				d.KeyPress += e => {
-					e.Handled = true;
+					e.Set();
 					d.Running = false;
 				};
 
@@ -431,7 +419,7 @@ public class ExploreSession : ITab {
 					Width = Dim.Fill(),
 					Height = Dim.Fill(),
 					ReadOnly = true,
-					Text = string.Join("\n", path.propertySet.Select(p => p.desc)),
+					Text = string.Join("\n", item.propertySet.Select(p => p.desc)),
 				});
 
 				Application.Run(d);
@@ -440,7 +428,6 @@ public class ExploreSession : ITab {
 				IEnumerable<MenuItem> GetCommon () {
 					yield return new MenuItem(item.local, null, null, () => false);
 					yield return new MenuItem("----", null, null, () => false);
-					yield return new MenuItem("Properties", null, () => { });
 					yield return new MenuItem("Find", null, () => {
 						main.FindIn(item.path);
 					});
@@ -544,6 +531,8 @@ public class ExploreSession : ITab {
 						if(c.Accept(item.path))
 							yield return new(c.name, "", () => RunProc(c.GetCmd(item.path)));
 					}
+
+					yield return new MenuItem("Properties", null, () => { ShowProperties(item); });
 				}
 
 				var c = new ContextMenu(pathList, new(Path.GetFileName(item.path),
@@ -719,8 +708,8 @@ public class ExploreSession : ITab {
 		pathList.SetNeedsDisplay();
 	}
 	void RefreshCwd () {
-		RefreshListing(fx.cwd);
 		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
+		RefreshListing(fx.cwd);
 		if(ctx.git != null) {
 			RefreshChanges();
 		}

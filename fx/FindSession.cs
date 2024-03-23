@@ -22,7 +22,8 @@ public class FindSession : ITab {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
-			Height = Dim.Fill()
+			Height = Dim.Fill(),
+			CanFocus = true,
 		};
 		var finder = new TreeFinder();
 		int w = 8;
@@ -37,6 +38,7 @@ public class FindSession : ITab {
 			Y = y,
 			Width = Dim.Fill(24),
 		};
+
 		var rootShowButton = new Button("All", false) {
 			X = Pos.Right(rootBar),
 			Y = y,
@@ -111,6 +113,7 @@ public class FindSession : ITab {
 			Width = 6
 		};
 		y++;
+		y++;
 		tree = new TreeView<IFind>(finder) {
 			X = 0,
 			Y = y,
@@ -127,9 +130,31 @@ public class FindSession : ITab {
 				main.EditFile(l);
 			}
 		};
+
+		root.AddKey(new() {
+			[Key.DeleteChar] = () => {
+				int i = 0;
+			},
+			[Key.Delete] = () => {
+				var tab = main.tabs.Tabs.First(t => t.View == root);
+				main.tabs.RemoveTab(tab);
+			}
+		});
+		root.AddKeyPress(e => {
+			return null;
+		});
+
+		rootBar.AddKey(new() {
+			[Key.Enter] = FindDirs
+		});
+		filterBar.AddKey(new() {
+			[Key.Enter] = FindFiles
+		});
+		findBar.AddKey(new() {
+			[Key.Enter] = FindLines
+		});
 		rootShowButton.Clicked += FindDirs;
 		filterShowButton.Clicked += FindFiles;
-		
 		void FindFiles () {
 			filter = filter with {
 				filePattern = new(filterBar.Text.ToString()),
@@ -154,7 +179,6 @@ public class FindSession : ITab {
 			replaceLabel, replaceBar, replaceAllButton, replacePrevButton, replaceNextButton,
 			tree
 			]);
-		
 	}
 	public void FindDirs () {
 		filter = filter with {
