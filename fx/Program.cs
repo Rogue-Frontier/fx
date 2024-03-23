@@ -227,7 +227,6 @@ public record Ctx {
 
 	public Dictionary<string, Repository> repos = new();
 
-	public Git git;
 	public Sln sln;
 	public Fx fx = new();
 	public Ctx () {
@@ -257,8 +256,11 @@ public record Ctx {
 		public void RefreshPatch () {
 			patch = repo.Diff.Compare<Patch>();
 		}
-		public string GetRepoLocal (string path) => path.Replace(root + Path.DirectorySeparatorChar, null);
 	}
+
+
+
+
 	public record Sln {
 		public string root;
 		public Sln (string path) {

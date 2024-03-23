@@ -27,10 +27,10 @@ public class ExploreSession : ITab {
 	private Ctx ctx;
 	private Fx fx => ctx.fx;
 
-	//Persistent inbetween visits
-	//Dictionary<string, PathItem> pathData = new();
+	//Persistent data
+	Dictionary<string, PathItem> pathData = new();
 	
-	/// <summary>Temporary</summary>		 
+	/// <summary>Temporary</summary>
 	private List<PathItem> cwdData = new();
 
 	/// <summary>Temporary</summary>
@@ -44,10 +44,10 @@ public class ExploreSession : ITab {
 	public ListView pathList;
 	private ListView gitList;
 
-
+	//When we cd out of a repository, we immediately forget about it.
+	private (string root, Repository repo) git;
 
 	public ExploreSession (Main main) {
-
 		ctx = main.ctx;
 		var favData = new List<PathItem>();
 		var cwdRecall = (string)null;
@@ -279,7 +279,7 @@ public class ExploreSession : ITab {
 						}
 						,
 						'.' => () => {
-							ShowContext(CreatePathItem(fx.cwd));
+							ShowContext(GetPathItem(fx.cwd));
 						}
 						,
 						':' => main.FocusTerm,
@@ -379,8 +379,10 @@ public class ExploreSession : ITab {
 
 			gitList.OpenSelectedItem += e => {
 				var item = gitData[e.Item];
-				if(item.staged) Commands.Unstage(ctx.git.repo, item.local);
-				else Commands.Stage(ctx.git.repo, item.local);
+
+
+				if(item.staged) Commands.Unstage(git.repo, item.local);
+				else Commands.Stage(git.repo, item.local);
 				RefreshChanges();
 				gitList.SelectedItem = e.Item;
 			};
@@ -583,7 +585,7 @@ public class ExploreSession : ITab {
 					}
 					if(i.propertyDict.TryGetValue(IS_LINK_TO.id, out var link)) {
 						var dest = ((Prop<string>)link).data;
-						var destItem = CreatePathItem(dest);
+						var destItem = GetPathItem(dest);
 						Go(destItem);
 						return;
 					}
@@ -669,14 +671,26 @@ public class ExploreSession : ITab {
 				yield return IS_ZIP;
 			}
 
-			/*
-			if(Path.GetDirectoryName(path) is Repository) {
-
+			RepoCtx repoCtx;
+			if(pathData.TryGetValue(path, out var it) && it.GetProp<RepoCtx>(IN_REPOSITORY, out repoCtx, out var pr) && Repository.IsValid(repoCtx.root)) {
+				yield return pr;
 			}
-			*/
-			if(ctx.git is {}) {
-				yield return ((PropGen<(Repository repo, string local)>)IN_REPOSITORY).Generate((ctx.git.repo, ctx.git.GetRepoLocal(path)));
+			var parent = Path.GetDirectoryName(path);
+			Repository repo;
+			
+			if(pathData.TryGetValue(parent, out var parItem) && parItem.HasProp(IS_REPOSITORY)) {
+				(repo, repoCtx) = GetRepo(parItem.path);
+				goto RepoFound;
+			} else if(parItem.GetProp(IN_REPOSITORY, out repoCtx)) {
+				(repo, repoCtx) = GetRepo(repoCtx.root);
+				goto RepoFound;
+			} else {
+				goto NoRepo;
 			}
+			RepoFound:
+			yield return ((PropGen<RepoCtx>)IN_REPOSITORY).Generate(repoCtx);
+			NoRepo:
+			int i = 0;
 		}
 		if(gitMap.TryGetValue(path, out var p)) {
 			if(p.staged) {
@@ -685,16 +699,22 @@ public class ExploreSession : ITab {
 				yield return IS_UNSTAGED;
 			}
 		}
-
 	}
-	PathItem CreatePathItem (string f) =>
-		new PathItem(Path.GetFileName(f), f, new(GetProps(f)));
+
+	PathItem GetPathItem (string path) {
+		if(!pathData.TryGetValue(path, out var item)) {
+			item = new(Path.GetFileName(path), path, new());
+		}
+		return pathData[path] = item with {
+			propertySet = GetProps(path).ToHashSet()
+		};
+	}
 
 	void RefreshListing (string s) {
 		try {
 			pathList.SetSource(cwdData = new List<PathItem>([
-				..Directory.GetDirectories(s).Select(CreatePathItem),
-				..Directory.GetFiles(s).Select(CreatePathItem)
+				..Directory.GetDirectories(s).Select(GetPathItem),
+				..Directory.GetFiles(s).Select(GetPathItem)
 			]));
 		}catch(UnauthorizedAccessException e) {
 		}
@@ -720,7 +740,8 @@ public class ExploreSession : ITab {
 	void RefreshCwd () {
 		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
 		RefreshListing(fx.cwd);
-		if(ctx.git != null) {
+		if(pathData[fx.cwd].GetProp(IN_REPOSITORY, out RepoCtx repoCtx)) {
+
 			RefreshChanges();
 		}
 		RefreshAddressBar();
@@ -770,26 +791,24 @@ public class ExploreSession : ITab {
 	}
 	private void RefreshGit () {
 		//Replace with property check?
-		if(ctx.git is { root: { } root, repo: { } repo }) {
-			if(fx.cwd.StartsWith(root)) {
-				ctx.git.RefreshPatch();
+		if(git is { root: { } root, repo: { } repo }) {
+			if(StillInRepo()) {
 				RefreshChanges();
 			} else {
 				gitData.Clear();
-				repo.Dispose();
-				ctx.git = null;
+				git = (null, null);
 			}
 			return;
 		}
-		if(Repository.IsValid(fx.cwd)) {
-			ctx.git = new(fx.cwd);
+		if(pathData[fx.cwd].HasProp(IS_REPOSITORY)) {
+			SetRepo(fx.cwd);
 			RefreshChanges();
 		}
 	}
 	public void RefreshChanges () {
 		IEnumerable<GitItem> GetItems () {
-			foreach(var item in ctx.git.repo.RetrieveStatus()) {
-				GitItem GetItem (bool staged) => new GitItem(item.FilePath, Path.GetFullPath($"{ctx.git.root}/{item.FilePath}"), staged);
+			foreach(var item in git.repo.RetrieveStatus()) {
+				GitItem GetItem (bool staged) => new GitItem(item.FilePath, Path.GetFullPath($"{git.root}/{item.FilePath}"), staged);
 				if(item.State switch {
 					FileStatus.ModifiedInIndex => GetItem(true),
 					FileStatus.ModifiedInWorkdir => GetItem(false),
@@ -832,6 +851,21 @@ public class ExploreSession : ITab {
 		});
 		Application.Run(d);
 	}
+
+	(Repository repo, RepoCtx repoCtx) GetRepo (string root) {
+		if(!ctx.repos.TryGetValue(root, out var repo)) {
+			ctx.repos[root] = repo = new Repository(root);
+		}
+		var repoCtx = repo.GetRepoCtx(root);
+		return (repo, repoCtx);
+	}
+	private bool StillInRepo () => fx.cwd.StartsWith(git.root);
+	private void SetRepo(string root) {
+		if(!ctx.repos.TryGetValue(root, out var repo)) {
+			ctx.repos[root] = repo = new Repository(root);
+		}
+		git = (root, repo);
+	}
 }
 public interface IProp {
 	string id { get; }
@@ -854,8 +888,14 @@ public static class Props {
 		IN_ZIP =		new PropGen<string>	("zipItem",				zipRoot => $"In Zip: {zipRoot}");
 
 	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
+	public static string GetRepoLocal (this Repository repo, string path) => path.Replace(repo.GetRoot() + Path.DirectorySeparatorChar, null);
 
-	public record RepoCtx (string root, string name) {}
+	public static RepoCtx GetRepoCtx(this Repository repo, string path) {
+		var root = repo.GetRoot();
+		var local = path.Replace(root + Path.DirectorySeparatorChar, null);
+		return new(root, local);
+	}
+	public record RepoCtx (string root, string local) {}
 }
 public record Prop (string id, string desc) : IProp {
 }
@@ -874,17 +914,24 @@ public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
 public record ProcItem (Process p) {
 	public override string ToString () => $"{p.ProcessName,-24}{p.Id,-8}";
 }
-public record PathItem (string local, string path, HashSet<IProp> propertySet = null, string linkTarget = null) {
+public record PathItem (string local, string path, HashSet<IProp> propertySet) {
 	public readonly Dictionary<string, IProp> propertyDict =
 		(propertySet ?? new())
 		.ToDictionary(p => p.id, p => p);
 	public bool HasProp (IProp p) => propertySet.Contains(p);
 	public bool HasProp (IPropGen p) => propertyDict.ContainsKey(p.id);
 	public bool HasProp<T> (IPropGen p, T data) where T : notnull => propertyDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
-
+	public bool GetProp (IPropGen p, out IProp prop) => propertyDict.TryGetValue(p.id, out prop);
 	public bool GetProp<T> (IPropGen p, out T data) {
 		data =
 			propertyDict.TryGetValue(p.id, out var prop) is { } b && b ?
+				((Prop<T>)prop).data :
+				default;
+		return b;
+	}
+	public bool GetProp<T> (IPropGen p, out T data, out IProp prop) {
+		data =
+			propertyDict.TryGetValue(p.id, out prop) is { } b && b ?
 				((Prop<T>)prop).data :
 				default;
 		return b;
