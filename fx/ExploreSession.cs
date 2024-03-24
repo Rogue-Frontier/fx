@@ -44,7 +44,7 @@ public class ExploreSession : ITab {
 	/// <summary>Temporary</summary>		
 	private List<GitItem> gitData = new();
 
-	private Button goPrev, goNext, goLeft;
+	private Pad goPrev, goNext, goLeft;
 	private TextField addressBar;
 	public ListView pathList;
 	private ListView gitList;
@@ -64,9 +64,9 @@ public class ExploreSession : ITab {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		goPrev = new Button("<-") { X = 0, TabStop = false };
-		goNext = new Button("->") { X = 6, TabStop = false };
-		goLeft = new Button("..") { X = 12, TabStop = false };
+		goPrev = new Pad("[<---]") { X = 1, TabStop = false };
+		goNext = new Pad("[--->]") { X = 7, TabStop = false };
+		goLeft = new Pad("[/../]") { X = 13, TabStop = false };
 		addressBar = new TextField() {
 			X = Pos.Percent(25) + 1,
 			Y = 0,
@@ -204,7 +204,7 @@ public class ExploreSession : ITab {
 		InitTreeLocal();
 		InitEvents();
 		InitCwd();
-		RefreshButtons();
+		RefreshPads();
 		UpdateProcesses();
 		void InitTreeLocal () {
 			SView.InitTree(
@@ -220,17 +220,17 @@ public class ExploreSession : ITab {
 			goPrev.AddMouse(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
 					[.. fx.cwdPrev.Select((p, i) => new MenuItem(p, "", () => GoPrev(i + 1)))])).Show(),
-				[MouseFlags.Button1Clicked] = e => e.Set(GoPrev())
+				[MouseFlags.Button1Pressed] = e => e.Set(GoPrev())
 			});
 			goNext.AddMouse(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
 					[.. fx.cwdNext.Select((p, i) => new MenuItem(p, "", () => GoNext(i + 1)))])).Show(),
-				[MouseFlags.Button1Clicked] = e => e.Set(GoNext())
+				[MouseFlags.Button1Pressed] = e => e.Set(GoNext())
 			});
 			goLeft.AddMouse(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
 					[.. Up().Select(p => new MenuItem(p, "", () => GoPath(p)))])).Show(),
-				[MouseFlags.Button1Clicked] = e => e.Set(GoLeft())
+				[MouseFlags.Button1Pressed] = e => e.Set(GoLeft())
 			});
 			pathList.AddMouse(new() {
 				[MouseFlags.Button3Clicked] = e => {
@@ -251,7 +251,7 @@ public class ExploreSession : ITab {
 				}
 			});
 			pathList.OpenSelectedItem += e => GoItem();
-			pathList.AddKeyPress(e => {
+			pathList.OnKeyPress(e => {
 				if(!pathList.HasFocus) return null;
 				return e.KeyEvent.Key switch {
 					Key.Enter or Key.CursorRight => () => GoItem(),
@@ -440,7 +440,7 @@ public class ExploreSession : ITab {
 					l.RemoveLast();
 					fx.cwdNext.AddLast(fx.cwd);
 					SetCwd(prev);
-					RefreshButtons();
+					RefreshPads();
 					return true;
 				}
 				return false;
@@ -450,7 +450,7 @@ public class ExploreSession : ITab {
 					l.RemoveLast();
 					fx.cwdPrev.AddLast(fx.cwd);
 					SetCwd(next);
-					RefreshButtons();
+					RefreshPads();
 					return true;
 				}
 				return false;
@@ -813,7 +813,7 @@ public class ExploreSession : ITab {
 			fx.cwdNext.Clear();
 			fx.cwdPrev.AddLast(fx.cwd);
 			SetCwd(dest);
-			RefreshButtons();
+			RefreshPads();
 			if(cwdData.FindIndex(p => p.local == f) is {}ind and not -1) {
 				pathList.SelectedItem = ind;
 			}
@@ -821,9 +821,9 @@ public class ExploreSession : ITab {
 		}
 		return false;
 	}
-	void RefreshButtons () =>
-		SView.ForTuple((Button button, IEnumerable<string> items) => {
-			button.Enabled = items.Any();
+	void RefreshPads () =>
+		SView.ForTuple((Pad pad, IEnumerable<string> items) => {
+			pad.Enabled = items.Any();
 		}, [
 			(goLeft, Up()), (goNext, fx.cwdNext), (goPrev, fx.cwdPrev)
 		]);
@@ -855,7 +855,7 @@ public class ExploreSession : ITab {
 		var d = new Dialog(title, []) {
 			Border = { Effect3D = false },
 		};
-		d.AddKeyPress(e => e.KeyEvent.Key switch {
+		d.OnKeyPress(e => e.KeyEvent.Key switch {
 			Key.Enter => d.RequestStop
 		});
 		d.Add(new TextView() {

@@ -48,7 +48,7 @@ public class Main {
 	public bool readProc = false;
 	private ExploreSession exploreSession;
 	public void ReadProc(Process proc) {
-
+		//TerminalView.cs
 	}
 	public void EditFile (FindLine line) {
 
@@ -58,12 +58,12 @@ public class Main {
 	}
 	public void FindIn (string path) {
 		var find = new FindSession(this);
-		folder.AddTab("Find", find.root).Clicked();
+		folder.AddTab($"Find({path})", find.root, true);
 		find.rootBar.Text = path;
+		find.rootBar.ReadOnly = true;
 		find.FindDirs();
 		find.tree.ExpandAll();
 	}
-
 	public void FocusTerm () {
 		term.SetFocus();
 	}
@@ -87,7 +87,7 @@ public class Main {
 				HotNormal = new(Color.Red, Color.Black),
 			},
 		};
-		term.AddKeyPress(e => {
+		term.OnKeyPress(e => {
 			var t = (string)term.Text;
 			return e.KeyEvent.Key switch {
 				Key.Enter when t.MatchArray("cd (?<dest>.+)") is [_, { } dest] => delegate {
@@ -321,11 +321,15 @@ public static class SView {
 					null;
 			e.Set(action != null);
 			action?.Invoke(e);
+
 		};
-	public static void AddKeyPress (this View v, KeyEvent f) =>
-		v.KeyPress += e => Run(e, d => f(d));
-	public static void AddMouseClick (this View v, MouseEvent f) =>
-		v.MouseClick += e => Run(e, d => f(d));
+	public static void OnKeyPress (this View v, KeyEv f) =>
+		v.KeyPress += DoRun(d => f(d));
+	public static void OnMouseClick (this View v, MouseEv f) =>
+		v.MouseClick += DoRun(d=>f(d));
+
+	private static Action<dynamic> DoRun(Func<dynamic, Action> f) =>
+		e => Run(e, f);
 	private static void Run (dynamic e, Func<dynamic, Action> f) {
 		Action a = f(e);
 		e.Handled = (a != null);
@@ -357,8 +361,7 @@ public static class SView {
 
 public record Folder {
 	public View root, head, body;
-	private List<Label> bars = new();
-
+	private List<View> bars = new();
 	private List<Tab> tabsList = new();
 	private Dictionary<View, Tab> tabs = new();
 	public Folder(View root, params(string name, View view)[] tabs) {
@@ -398,7 +401,7 @@ public record Folder {
 	}
 	public void Refresh () {
 		head.RemoveAll();
-		var barLeft = new Label(" ") {
+		var barLeft = new View(" ") {
 			X = 0,
 			Y = 0,
 			Width = 1,
@@ -410,32 +413,41 @@ public record Folder {
 		}
 		head.SetNeedsDisplay();
 	}
-	public Tab AddTab(string name, View view) {
+	public Tab AddTab(string name, View view, bool show = false) {
 		var tab = new Tab(name, view);
-		tab.Clicked = () => {
-			ShowTab(tab);
-			SetBody(view);
-		};
 		tab.Place(this);
 		tabs[view] = tab;
 		tabsList.Add(tab);
+		if(show) {
+			FocusTab(tab);
+		}
 		return tab;
 	}
 	public void RemoveTab(View view) {
 		if(tabs.Remove(view, out var tab)) {
-			
+			int index = tabsList.IndexOf(tab);
+			tabsList.Remove(tab);
 			if(body.Subviews.SingleOrDefault() is { } v) {
 				if(v == view) {
 					body.RemoveAll();
+
+					//Show next tab
+					if(tabsList.Any()) {
+						FocusTab(tabsList[Math.Clamp(index, 0, tabsList.Count - 1)]);
+					}
 				}else {
-					//tabs[v].Clicked();
+					//FocusTab(tabs[v]);
 				}
 			}
 			Refresh();
-
 		}
 	}
-	private void ShowTab(Tab tab) {
+
+	public void FocusTab(Tab tab) {
+		SelectTab(tab);
+		SetBody(tab.view);
+	}
+	private void SelectTab(Tab tab) {
 		foreach(var t in tabs.Values) {
 			t.Refresh();
 		}
@@ -451,12 +463,12 @@ public record Folder {
 				return;
 			}
 			var next = tabsList[(tabsList.IndexOf(tab) + 1) % tabsList.Count];
-			next.Clicked();
+			FocusTab(next);
 		} else {
-			tabsList[0].Clicked();
+			FocusTab(tabsList[0]);
 		}
 	}
-	void SetBody (View view) {
+	public void SetBody (View view) {
 		body.RemoveAll();
 		body.Add(view);
 	}
@@ -464,63 +476,58 @@ public record Folder {
 public record Tab {
 	public string name;
 	public View view;
-	public Action Clicked = default;
 
 	public View tab;
-	public Label leftBar, rightBar;
-
-	
+	public View leftBar, rightBar;
 	public Tab (string name, View view) {
 		this.name = name;
 		this.view = view;
 	}
-	public void Place (Folder folder, bool open = false) {
+	public void Place (Folder folder) {
 		//context menu
 		//- Kill all to left
 		//- Kill all to right
 
 		var head = folder.head;
-		leftBar = (Label)head.Subviews.Last();
+		leftBar = head.Subviews.Last();
 		tab = new Lazy<View>(() => {
-			var root = new View() {
+			var root = new Pad(name) {
 				X = Pos.Right(leftBar),
 				Y = 0,
 				Height = 1,
 				Width = name.Length + 3,
 			};
-
-			var label = new Label($"{name}") {
-				X = 0,
-				Y = 0,
-				TabStop = true
+			root.MouseClick += e => {
+				if(e.MouseEvent.Flags == MouseFlags.Button1Pressed) {
+					folder.FocusTab(this);
+				}
 			};
-			label.Clicked += Clicked;
 
-			var kill = new Label("X") {
-				X = Pos.AnchorEnd(2),
+			var kill = new Pad("[X]") {
+				X = Pos.AnchorEnd(3),
 				Y = 0,
-				Width = 1,
+				Width = 3,
 				Height = 1
 			};
 			kill.Clicked += () => {
 				folder.RemoveTab(view);
 			};
-			InitTree([[root, label, kill]]);
+			InitTree([[root, kill]]);
 			return root;
 		}).Value;
 
-		rightBar = new Label(" ") {
+		rightBar = new View(" ") {
 			X = Pos.Right(tab),
 			Y = 0,
 			Height = 1,
 		};
 		InitTree([[head, tab, rightBar]]);
-		Refresh(open);
+		Refresh(folder.body.Subviews.SingleOrDefault() == view);
 	}
 	public void Refresh(bool open = false) {
 		if(open) {
-			leftBar.Text = "[";
-			rightBar.Text = "]";
+			leftBar.Text = "<";
+			rightBar.Text = ">";
 		} else {
 			leftBar.Text = rightBar.Text = " ";
 		}
@@ -528,5 +535,5 @@ public record Tab {
 	public static implicit operator View (Tab t) => t.tab;
 }
 
-public delegate Action? KeyEvent (KeyEventEventArgs e);
-public delegate Action? MouseEvent (MouseEventArgs e);
+public delegate Action? KeyEv (KeyEventEventArgs e);
+public delegate Action? MouseEv (MouseEventArgs e);
