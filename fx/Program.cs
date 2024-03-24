@@ -26,6 +26,8 @@ using System.Reflection.Metadata;
 using static Terminal.Gui.View;
 using Command = fx.Command;
 using System.Reflection.Emit;
+using Label = Terminal.Gui.Label;
+using static Terminal.Gui.TabView;
 try {
 	Application.Init();
 	Application.UseSystemConsole = true;
@@ -347,8 +349,8 @@ public static class SView {
 
 public record Folder {
 	public View root, head, body;
-
-	private Dictionary<View, Button> tabs = new();
+	private List<Label> bars = new();
+	private Dictionary<View, Tab> tabs = new();
 	public Folder(View root, params(string name, View view)[] tabs) {
 		this.root = root;
 		head = new View() {
@@ -363,6 +365,13 @@ public record Folder {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
+
+		var barLeft = new Label(" ") {
+			X = 0,
+			Y = 0,
+		};
+		head.Add(barLeft);
+
 		foreach(var (name, view) in tabs) {
 			AddTab(name, view);
 		}
@@ -372,34 +381,66 @@ public record Folder {
 		var x = head.Subviews.LastOrDefault() is { } l ?
 			Pos.Right(l) :
 			0;
-		var tab = new Button($"{name}") {
-			X = x,
-			Y = 0,
-			Height = 1
-		};
+		var barLeft = head.Subviews.Last();
+		var tab = new Tab(x, name);
 		head.Add(tab);
+		var barRight = new Label(" ") {
+			X = Pos.Right(tab.view),
+			Y = 0,
+		};
+		head.Add(barRight);
 		tab.Clicked += () => {
 			ShowTab(tab);
 			SetBody(view);
 		};
 		tabs[view] = tab;
 	}
-	public void RemoveTab(View v) {
-		if(tabs.Remove(v, out var b)) {
-			head.Remove(b);
-			body.Remove(v);
+
+	public void Redraw () {
+
+	}
+	public void RemoveTab(View view) {
+		if(tabs.Remove(view, out var tab)) {
+			Redraw();
 		}
 	}
-	private void ShowTab(Button tab) {
-		foreach(var b in head.Subviews) {
-			b.Enabled = true;
+	private void ShowTab(Tab tab) {
+		foreach(var t in tabs.Values) {
+			t.Redraw(false);
 		}
-		tab.Enabled = false;
+		tab.Redraw();
 	}
 	void SetBody (View view) {
 		body.RemoveAll();
 		body.Add(view);
 	}
 }
+public record Tab {
+	public View view;
+	public string name;
+
+	public Action Clicked = default;
+	public Tab (Pos x, string name) {
+		this.name = name;
+
+		view = new View() {
+			X = x,
+			Y = 0,
+			Height = 1,
+			Width = name.Length + 3,
+		};
+		Redraw(false);
+	}
+	public void Redraw(bool open = true) {
+		view.RemoveAll();
+		var label = new Label(open ? $"[{name} ]" : $" {name}  ");
+		label.Clicked += () => {
+			Clicked();
+		};
+		view.Add(label);
+	}
+	public static implicit operator View (Tab t) => t.view;
+}
+
 public delegate Action? KeyEvent (KeyEventEventArgs e);
 public delegate Action? MouseEvent (MouseEventArgs e);
