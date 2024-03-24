@@ -137,8 +137,7 @@ public class FindSession : ITab {
 				int i = 0;
 			},
 			[Key.Delete] = () => {
-				var tab = main.tabs.Tabs.First(t => t.View == root);
-				main.tabs.RemoveTab(tab);
+				main.folder.RemoveTab(root);
 			}
 		});
 		root.AddKeyPress(e => {

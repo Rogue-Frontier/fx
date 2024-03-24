@@ -42,7 +42,7 @@ public class Main {
 	public Ctx ctx;
 	public View[] root;
 	public TextField term;
-	public TabView tabs;
+	public Folder folder;
 	public bool readProc = false;
 	private ExploreSession exploreSession;
 	public void ReadProc(Process proc) {
@@ -56,13 +56,10 @@ public class Main {
 	}
 	public void FindIn (string path) {
 		var find = new FindSession(this);
-		tabs.AddTab(new TabView.Tab("Find", find.root), true);
+		folder.AddTab("Find", find.root);
 		find.rootBar.Text = path;
 		find.FindDirs();
 		find.tree.ExpandAll();
-	}
-	public void AddTab(TabView.Tab tab) {
-		tabs.AddTab(tab, false);
 	}
 
 	public void FocusTerm () {
@@ -88,7 +85,6 @@ public class Main {
 				HotNormal = new(Color.Red, Color.Black),
 			},
 		};
-
 		term.AddKeyPress(e => {
 			var t = (string)term.Text;
 			return e.KeyEvent.Key switch {
@@ -138,7 +134,12 @@ public class Main {
 		//Add context button to switch to Find with root at dir
 		//Add button to treat dir as root
 		//Add option for treeview
-		tabs = new Tabs(this).root;
+		folder = new Folder(new View() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(3),
+		});
 		exploreSession = new ExploreSession(this);
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
@@ -156,7 +157,14 @@ public class Main {
 			InitTree([view, text]);
 			return view;
 		}).Value;
-		new List<ITab>([homeSession, exploreSession]).ForEach(s => AddTab(s.GetTab()));
+		
+		foreach(var(name, view) in
+		new Dictionary<string, View>() {
+			["Home"] = homeSession.root,
+			["Expl"] = exploreSession.root
+		}) {
+			folder.AddTab(name, view);
+		}
 		var window = new Window() {
 			X = 0,
 			Y = 0,
@@ -167,7 +175,7 @@ public class Main {
 		};
 
 		InitTree([
-			[window, tabs, termBar]
+			[window, folder.root, termBar]
 		]);
 		var windowMenuBar = new MenuBar() {
 			Visible = true,
@@ -337,37 +345,60 @@ public static class SView {
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
 }
 
-public record Tabby {
-	public View root;
-	public Tabby(View root, (string name, View view)[] tabs) {
+public record Folder {
+	public View root, head, body;
+
+	private Dictionary<View, Button> tabs = new();
+	public Folder(View root, params(string name, View view)[] tabs) {
 		this.root = root;
-		View bar = new View() {
+		head = new View() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = 1
 		};
-		View tab = new View() {
+		body = new View() {
 			X = 0,
 			Y = 1,
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-
-		void SetTab (View view) {
-			tab.RemoveAll();
-			tab.Add(view);
-		}
 		foreach(var (name, view) in tabs) {
-			var tag = new Button(name) {
-				X = bar.Subviews.LastOrDefault() is { } l ? Pos.Left(l) : 0,
-				Y = 0,
-				Height = 1
-			};
-			bar.Add(tag);
-			tag.Clicked += () => SetTab(view);
+			AddTab(name, view);
 		}
-		InitTree([[root, bar, tab]]);
+		InitTree([[root, head, body]]);
+	}
+	public void AddTab(string name, View view) {
+		var x = head.Subviews.LastOrDefault() is { } l ?
+			Pos.Right(l) :
+			0;
+		var tab = new Button($"{name}") {
+			X = x,
+			Y = 0,
+			Height = 1
+		};
+		head.Add(tab);
+		tab.Clicked += () => {
+			ShowTab(tab);
+			SetBody(view);
+		};
+		tabs[view] = tab;
+	}
+	public void RemoveTab(View v) {
+		if(tabs.Remove(v, out var b)) {
+			head.Remove(b);
+			body.Remove(v);
+		}
+	}
+	private void ShowTab(Button tab) {
+		foreach(var b in head.Subviews) {
+			b.Enabled = true;
+		}
+		tab.Enabled = false;
+	}
+	void SetBody (View view) {
+		body.RemoveAll();
+		body.Add(view);
 	}
 }
 public delegate Action? KeyEvent (KeyEventEventArgs e);
