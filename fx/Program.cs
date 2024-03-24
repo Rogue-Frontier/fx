@@ -58,7 +58,7 @@ public class Main {
 	}
 	public void FindIn (string path) {
 		var find = new FindSession(this);
-		folder.AddTab("Find", find.root);
+		folder.AddTab("Find", find.root).Clicked();
 		find.rootBar.Text = path;
 		find.FindDirs();
 		find.tree.ExpandAll();
@@ -175,6 +175,14 @@ public class Main {
 			Border = { BorderStyle = BorderStyle.None, Effect3D = false, DrawMarginFrame = false },
 			Title = "fx",
 		};
+
+		window.AddKey(value: new() {
+			['{'] = () => {
+
+				return;
+			},
+			['}'] = folder.NextTab
+		});
 
 		InitTree([
 			[window, folder.root, termBar]
@@ -350,6 +358,8 @@ public static class SView {
 public record Folder {
 	public View root, head, body;
 	private List<Label> bars = new();
+
+	private List<Tab> tabsList = new();
 	private Dictionary<View, Tab> tabs = new();
 	public Folder(View root, params(string name, View view)[] tabs) {
 		this.root = root;
@@ -365,50 +375,86 @@ public record Folder {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-
+		foreach(var (name, view) in tabs) {
+			var tab = new Tab(name, view);
+			tabsList.Add(tab);
+			this.tabs[view] = tab;
+		}
+		Refresh();
+		/*
 		var barLeft = new Label(" ") {
 			X = 0,
 			Y = 0,
+			Width = 1,
+			Height = 1
 		};
 		head.Add(barLeft);
 
 		foreach(var (name, view) in tabs) {
 			AddTab(name, view);
 		}
+		*/
 		InitTree([[root, head, body]]);
 	}
-	public void AddTab(string name, View view) {
-		var x = head.Subviews.LastOrDefault() is { } l ?
-			Pos.Right(l) :
-			0;
-		var barLeft = head.Subviews.Last();
-		var tab = new Tab(x, name);
-		head.Add(tab);
-		var barRight = new Label(" ") {
-			X = Pos.Right(tab.view),
+	public void Refresh () {
+		head.RemoveAll();
+		var barLeft = new Label(" ") {
+			X = 0,
 			Y = 0,
+			Width = 1,
+			Height = 1
 		};
-		head.Add(barRight);
-		tab.Clicked += () => {
+		head.Add(barLeft);
+		foreach(var tab in tabs.Values) {
+			tab.Place(this);
+		}
+		head.SetNeedsDisplay();
+	}
+	public Tab AddTab(string name, View view) {
+		var tab = new Tab(name, view);
+		tab.Clicked = () => {
 			ShowTab(tab);
 			SetBody(view);
 		};
+		tab.Place(this);
 		tabs[view] = tab;
-	}
-
-	public void Redraw () {
-
+		tabsList.Add(tab);
+		return tab;
 	}
 	public void RemoveTab(View view) {
 		if(tabs.Remove(view, out var tab)) {
-			Redraw();
+			
+			if(body.Subviews.SingleOrDefault() is { } v) {
+				if(v == view) {
+					body.RemoveAll();
+				}else {
+					//tabs[v].Clicked();
+				}
+			}
+			Refresh();
+
 		}
 	}
 	private void ShowTab(Tab tab) {
 		foreach(var t in tabs.Values) {
-			t.Redraw(false);
+			t.Refresh();
 		}
-		tab.Redraw();
+		tab.Refresh(true);
+	}
+	public void NextTab () {
+		if(tabsList.Count == 0) {
+			return;
+		}
+		if(body.Subviews.SingleOrDefault() is { } v) {
+			var tab = tabs[v];
+			if(tabsList.Count == 1) {
+				return;
+			}
+			var next = tabsList[(tabsList.IndexOf(tab) + 1) % tabsList.Count];
+			next.Clicked();
+		} else {
+			tabsList[0].Clicked();
+		}
 	}
 	void SetBody (View view) {
 		body.RemoveAll();
@@ -416,30 +462,70 @@ public record Folder {
 	}
 }
 public record Tab {
-	public View view;
 	public string name;
-
+	public View view;
 	public Action Clicked = default;
-	public Tab (Pos x, string name) {
-		this.name = name;
 
-		view = new View() {
-			X = x,
+	public View tab;
+	public Label leftBar, rightBar;
+
+	
+	public Tab (string name, View view) {
+		this.name = name;
+		this.view = view;
+	}
+	public void Place (Folder folder, bool open = false) {
+		//context menu
+		//- Kill all to left
+		//- Kill all to right
+
+		var head = folder.head;
+		leftBar = (Label)head.Subviews.Last();
+		tab = new Lazy<View>(() => {
+			var root = new View() {
+				X = Pos.Right(leftBar),
+				Y = 0,
+				Height = 1,
+				Width = name.Length + 3,
+			};
+
+			var label = new Label($"{name}") {
+				X = 0,
+				Y = 0,
+				TabStop = true
+			};
+			label.Clicked += Clicked;
+
+			var kill = new Label("X") {
+				X = Pos.AnchorEnd(2),
+				Y = 0,
+				Width = 1,
+				Height = 1
+			};
+			kill.Clicked += () => {
+				folder.RemoveTab(view);
+			};
+			InitTree([[root, label, kill]]);
+			return root;
+		}).Value;
+
+		rightBar = new Label(" ") {
+			X = Pos.Right(tab),
 			Y = 0,
 			Height = 1,
-			Width = name.Length + 3,
 		};
-		Redraw(false);
+		InitTree([[head, tab, rightBar]]);
+		Refresh(open);
 	}
-	public void Redraw(bool open = true) {
-		view.RemoveAll();
-		var label = new Label(open ? $"[{name} ]" : $" {name}  ");
-		label.Clicked += () => {
-			Clicked();
-		};
-		view.Add(label);
+	public void Refresh(bool open = false) {
+		if(open) {
+			leftBar.Text = "[";
+			rightBar.Text = "]";
+		} else {
+			leftBar.Text = rightBar.Text = " ";
+		}
 	}
-	public static implicit operator View (Tab t) => t.view;
+	public static implicit operator View (Tab t) => t.tab;
 }
 
 public delegate Action? KeyEvent (KeyEventEventArgs e);

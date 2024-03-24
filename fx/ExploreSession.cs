@@ -293,7 +293,7 @@ public class ExploreSession : ITab {
 						}
 						,
 						'.' => () => {
-							var c = ShowContext(GetPathItem(fx.cwd));
+							var c = ShowContext(GetPathItem(fx.cwd), -2);
 							c.MenuBar.AddKey(value: new() {
 								{ '.', c.Hide }
 							});
