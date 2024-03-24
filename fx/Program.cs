@@ -25,6 +25,7 @@ using fx;
 using System.Reflection.Metadata;
 using static Terminal.Gui.View;
 using Command = fx.Command;
+using System.Reflection.Emit;
 try {
 	Application.Init();
 	Application.UseSystemConsole = true;
@@ -265,10 +266,28 @@ public record Ctx {
 	}
 }
 public static class SView {
-	public static void AddKey (this View v, Dictionary<Key, Action> key, Dictionary<int, Action> value = null) =>
+	public static Delegate Bind<T, U>(this T del, params object[] args) where T: System.Delegate{
+		Type[] par = [..typeof(T).GetMethod("Invoke").GetParameters().Select(par => par.ParameterType)];
+		Type[] unbound = par[args.Length..];
+
+		var name = typeof(T).GetType().Name;
+
+		typeof(Action<,,,,>).MakeGenericType();
+		return null;
+	}
+	public static (int, int) GetCurrentLoc(this View v) {
+		var (x, y) = (0, 0);
+		while(v != null) {
+			var f = v.Frame;
+			(x, y) = (f.X+x, f.Y+y);
+			v = v.SuperView;
+		}
+		return (x,y);
+	}
+	public static void AddKey (this View v, Dictionary<Key, Action> key = null, Dictionary<int, Action> value = null) =>
 		v.KeyPress += e => {
 			var action =
-				key.TryGetValue(e.KeyEvent.Key, out var a) ?
+				key?.TryGetValue(e.KeyEvent.Key, out var a) == true ?
 					a :
 				value?.TryGetValue(e.KeyEvent.KeyValue, out a) == true ?
 					a :
@@ -316,6 +335,40 @@ public static class SView {
 	public static void Handle (this KeyEventEventArgs e, Func<KeyEventEventArgs, bool> f) => e.Handled = f(e);
 	*/
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
+}
+
+public record Tabby {
+	public View root;
+	public Tabby(View root, (string name, View view)[] tabs) {
+		this.root = root;
+		View bar = new View() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = 1
+		};
+		View tab = new View() {
+			X = 0,
+			Y = 1,
+			Width = Dim.Fill(),
+			Height = Dim.Fill()
+		};
+
+		void SetTab (View view) {
+			tab.RemoveAll();
+			tab.Add(view);
+		}
+		foreach(var (name, view) in tabs) {
+			var tag = new Button(name) {
+				X = bar.Subviews.LastOrDefault() is { } l ? Pos.Left(l) : 0,
+				Y = 0,
+				Height = 1
+			};
+			bar.Add(tag);
+			tag.Clicked += () => SetTab(view);
+		}
+		InitTree([[root, bar, tab]]);
+	}
 }
 public delegate Action? KeyEvent (KeyEventEventArgs e);
 public delegate Action? MouseEvent (MouseEventArgs e);

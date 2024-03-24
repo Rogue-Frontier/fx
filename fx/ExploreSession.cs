@@ -20,9 +20,11 @@ using static fx.Props;
 using System.Collections.Concurrent;
 using static System.Net.Mime.MediaTypeNames;
 using Application = Terminal.Gui.Application;
+using System.Runtime.InteropServices;
+using System.Xml.Linq;
 namespace fx;
 public class ExploreSession : ITab {
-	public string TabName => "Explore";
+	public string TabName => "Expl";
 	public View TabView => root;
 
 	public View root;
@@ -236,7 +238,16 @@ public class ExploreSession : ITab {
 					var i = pathList.TopItem + e.MouseEvent.Y;
 					if(i >= cwdData.Count)
 						return;
-					var c = ShowContext(cwdData[i]);
+					pathList.SelectedItem = i;
+					var c = ShowContext(cwdData[i], i);
+					/*
+					c.MenuItems.Children.ToList().ForEach(it => it.Action += () => {
+						int i = 0;
+					});
+					*/
+					c.MenuBar.MenuAllClosed += () => {
+						pathList.SelectedItem = prev;
+					};
 				}
 			});
 			pathList.OpenSelectedItem += e => GoItem();
@@ -282,7 +293,10 @@ public class ExploreSession : ITab {
 						}
 						,
 						'.' => () => {
-							ShowContext(GetPathItem(fx.cwd));
+							var c = ShowContext(GetPathItem(fx.cwd));
+							c.MenuBar.AddKey(value: new() {
+								{ '.', c.Hide }
+							});
 						}
 						,
 						':' => main.FocusTerm,
@@ -302,10 +316,10 @@ public class ExploreSession : ITab {
 						}
 						,
 						'/' => () => {
-							if(!GetItem(out var p)) return;
-							ShowContext(p);
-						}
-						,
+
+							if(!GetItem(out var p, out var ind)) return;
+							var c = ShowContext(p, ind);
+						},
 						'~' => () => {
 							if(!GetItem(out var p)) return;
 							if(!fx.locked.Remove(p.path)) {
@@ -409,11 +423,12 @@ public class ExploreSession : ITab {
 			});
 			*/
 			
-			ContextMenu ShowContext (PathItem item) {
-
-				var c = new ContextMenu(pathList, new(Path.GetFileName(item.path),
-					[.. GetActions(main, item)]));
+			ContextMenu ShowContext (PathItem item, int yInc = 0) {
+				var (x, y) = pathList.GetCurrentLoc();
+				var c = new ContextMenu(x, y+yInc, new MenuBarItem(Path.GetFileName(item.path), [
+					.. GetActions(main, item)]));
 				c.Show();
+				c.ForceMinimumPosToZero = true;
 				return c;
 			}
 			
@@ -470,7 +485,7 @@ public class ExploreSession : ITab {
 						GoPath(i.path);
 						return;
 					}
-					RunProc(main, i.path);
+					RunCmd(main, i.path);
 				}
 
 			}
@@ -522,7 +537,7 @@ public class ExploreSession : ITab {
 
 		Application.Run(d);
 	}
-	Process RunProc (Main main, string cmd) {
+	Process RunCmd (Main main, string cmd) {
 		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
 		var cmdArgs = @$"/c {cmd}";
 		var pi = new ProcessStartInfo("cmd.exe") {
@@ -530,14 +545,8 @@ public class ExploreSession : ITab {
 			Arguments = $"{cmdArgs}",
 			UseShellExecute = true,
 			WindowStyle = ProcessWindowStyle.Hidden,
-			//CreateNoWindow = true,
 		};
-		var p = new Process() {
-			StartInfo = pi
-
-		};
-		p.Start();
-
+		var p = Process.Start(pi);
 		main.ReadProc(p);
 		return p;
 	}
@@ -569,8 +578,6 @@ public class ExploreSession : ITab {
 		if(Path.GetDirectoryName(path) is { } par && HasRepo(GetPathItem(par), out var root)) {
 			yield return IN_REPOSITORY.Make(CalcRepoItem(root, path));
 		}
-
-
 		if(gitMap.TryGetValue(path, out var p)) {
 			if(p.staged) {
 				yield return IS_STAGED;
@@ -581,85 +588,44 @@ public class ExploreSession : ITab {
 	}
 
 	IEnumerable<MenuItem> GetActions (Main main, PathItem item) {
-		yield return new MenuItem(item.local, null, null, () => false);
-		yield return new MenuItem("----", null, null, () => false);
+		//yield return new MenuItem(item.local, null, null, () => false);
+		//yield return new MenuItem("----", null, null, () => false);
+		yield return new MenuItem("Cancel", "", () => { });
 		yield return new MenuItem("Find", null, () => {
 			main.FindIn(item.path);
 		});
+
+		yield return new MenuItem("Show in Explorer", "", () => RunCmd(main, @$"explorer.exe /select, ""{item.path}"""));
+
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuItem("Remember", "", () => cwdRecall = item.path);
-			yield return new MenuItem("Open in Explorer", "", () => RunProc(main, $"explorer.exe {item.path}"));
-			yield return new MenuItem("New File", "", () => {
-				var create = new Button("Create") { Enabled = false };
-				var cancel = new Button("Cancel");
-				var d = new Dialog("New File", [
-					create, cancel
-					]) { Width = 32, Height = 5 };
-				d.Border.Effect3D = false;
-				var name = new TextField() {
-					X = 0,
-					Y = 0,
-					Width = Dim.Fill(2),
-					Height = 1,
-				};
-				name.TextChanging += e => {
-					create.Enabled = e.NewText.Any();
-				};
-				create.Clicked += delegate {
-					var f = Path.Combine(item.path, name.Text.ToString());
-					File.Create(f);
-					//select this file
-					RefreshCwd();
-					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
-					d.RequestStop();
-				};
-				cancel.Clicked += () => {
-					d.RequestStop();
-				};
-				d.Add(name);
-				name.SetFocus();
-				Application.Run(d);
+			yield return new MenuItem("Open in Explorer", "", () => RunCmd(main, $"explorer.exe {item.path}"));
 
-			}, canExecute: () => !item.HasProp(IS_LOCKED));
-			yield return new MenuItem("New Directory", "", () => {
-				var create = new Button("Create") { Enabled = false };
-				var cancel = new Button("Cancel");
-				var d = new Dialog("New Directory", [
-					create, cancel
-					]) { Width = 32, Height = 5 };
-				d.Border.Effect3D = false;
-				var name = new TextField() {
-					X = 0,
-					Y = 0,
-					Width = Dim.Fill(2),
-					Height = 1,
-				};
-				name.TextChanging += e => {
-					create.Enabled = e.NewText.Any();
-				};
-				create.Clicked += delegate {
-					var f = Path.Combine(item.path, name.Text.ToString());
-					Directory.CreateDirectory(f);
-					//select this file
+
+			var createFile = () => {
+				RequestName("New File", name => {
+					var f = Path.Combine(item.path, name);
+					File.Create(f);
 					RefreshCwd();
 					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
-					d.RequestStop();
-				};
-				cancel.Clicked += () => {
-					d.RequestStop();
-				};
-				d.Add(name);
-				name.SetFocus();
-				Application.Run(d);
-			}, canExecute: () => !item.HasProp(IS_LOCKED));
+					return true;
+				});
+			};
+			yield return new MenuItem("New File", "", createFile, canExecute: () => !item.HasProp(IS_LOCKED));
+			var createDir = () => {
+				RequestName("New Directory", name => {
+					var f = Path.Combine(item.path, name);
+					Directory.CreateDirectory(f);
+					RefreshCwd();
+					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					return true;
+				});
+			};
+			yield return new MenuItem("New Dir", "", createDir, canExecute: () => !item.HasProp(IS_LOCKED));
 			goto Done;
 		}
-
-		var parItem = GetPathItem(Path.GetDirectoryName(item.path));
-
-		if(HasRepo(parItem, out string root)) {
-
-			string local = git.repo.GetRepoLocal(item.path);
+		if(Path.GetDirectoryName(item.path) is { }par && HasRepo(GetPathItem(par), out string root)) {
+			string local = GetRepoLocal(root, item.path);
 			IEnumerable<string> Paths () {
 				yield return local;
 			}
@@ -691,10 +657,41 @@ public class ExploreSession : ITab {
 		yield return new("Copy Path", "", () => { Clipboard.TrySetClipboardData(item.path); });
 		foreach(var c in ctx.Commands) {
 			if(c.Accept(item.path))
-				yield return new(c.name, "", () => RunProc(main, c.GetCmd(item.path)));
+				yield return new(c.name, "", () => RunCmd(main, c.GetCmd(item.path)));
 		}
 
 		yield return new MenuItem("Properties", null, () => { ShowProperties(item); });
+	}
+
+
+	void RequestName (string title, Predicate<string> accept) {
+		var create = new Button("Create") { Enabled = false };
+		var cancel = new Button("Cancel");
+		var d = new Dialog(title, [
+			create, cancel
+			]) { Width = 32, Height = 5 };
+		d.Border.Effect3D = false;
+		var input = new TextField() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(2),
+			Height = 1,
+		};
+		input.TextChanging += e => {
+			create.Enabled = e.NewText.Any();
+		};
+		input.AddKey(new() {
+			[Key.Enter] = create.OnClicked
+		});
+		create.Clicked += () => {
+			if(accept(input.Text.ToString())) {
+				d.RequestStop();
+			}
+		};
+		cancel.Clicked += d.RequestStop;
+		d.Add(input);
+		input.SetFocus();
+		Application.Run(d);
 	}
 	PathItem GetPathItem (string path) {
 		return pathData[path] =
@@ -845,9 +842,18 @@ public class ExploreSession : ITab {
 		p = cwdData[pathList.SelectedItem];
 		return true;
 	}
+	bool GetItem (out PathItem p, out int index) {
+		if(pathList.SelectedItem >= cwdData.Count) {
+			p = null;
+			index = -1;
+			return false;
+		}
+		p = cwdData[index = pathList.SelectedItem];
+		return true;
+	}
 	public void Preview (string title, string content) {
 		var d = new Dialog(title, []) {
-			Border = { Effect3D = false }
+			Border = { Effect3D = false },
 		};
 		d.AddKeyPress(e => e.KeyEvent.Key switch {
 			Key.Enter => d.RequestStop
