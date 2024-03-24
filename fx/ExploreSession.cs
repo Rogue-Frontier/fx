@@ -23,41 +23,29 @@ using Application = Terminal.Gui.Application;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 namespace fx;
-public class ExploreSession : ITab {
-	public string TabName => "Expl";
-	public View TabView => root;
-
+public class ExploreSession {
 	public View root;
-
 	private Ctx ctx;
 	private Fx fx => ctx.fx;
-
 	//Keep old data around since we might use the properties
 	ConcurrentDictionary<string, PathItem> pathData = new();
-	
 	/// <summary>Temporary</summary>
 	private List<PathItem> cwdData = new();
-
 	/// <summary>Temporary</summary>
 	Dictionary<string, GitItem> gitMap = new();
-	
 	/// <summary>Temporary</summary>		
 	private List<GitItem> gitData = new();
-
 	private Pad goPrev, goNext, goLeft;
 	private TextField addressBar;
 	public ListView pathList;
 	private ListView gitList;
-
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
 	private string cwdRecall = null;
 	public ExploreSession (Main main) {
 		ctx = main.ctx;
 		var favData = new List<PathItem>();
-		
 		var procData = new List<ProcItem>();
-
 		root = new View() {
 			X = 0,
 			Y = 0,
@@ -233,6 +221,13 @@ public class ExploreSession : ITab {
 				[MouseFlags.Button1Pressed] = e => e.Set(GoLeft())
 			});
 			pathList.AddMouse(new() {
+				[MouseFlags.Button1Pressed] = e => {
+					var i = pathList.TopItem + e.MouseEvent.Y;
+					if(i >= cwdData.Count)
+						return;
+					pathList.SelectedItem = i;
+					pathList.SetNeedsDisplay();
+				},
 				[MouseFlags.Button3Clicked] = e => {
 					var prev = pathList.SelectedItem;
 					var i = pathList.TopItem + e.MouseEvent.Y;

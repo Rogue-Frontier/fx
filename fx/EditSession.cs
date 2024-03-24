@@ -4,14 +4,12 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Terminal.Gui;
-
 namespace fx;
-public class EditSession : ITab {
-	public string TabName => "Edit";
-	public View TabView => root;
-
+public class EditSession {
 	public View root;
-	public EditSession (string path) {
+	public EditSession (string path, int row = 0, int col = 0) {
+		var content = File.ReadAllText(path);
+
 		root = new View() {
 			X = 0,
 			Y = 0,
@@ -22,14 +20,17 @@ public class EditSession : ITab {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
-			Height = 1
+			Height = 1,
+			ReadOnly = true
 		};
 		var textView = new TextView() {
 			X = 0,
 			Y = 2,
 			Width = Dim.Fill(),
-			Height = Dim.Fill()
+			Height = Dim.Fill(),
+			Text = content,
 		};
+		textView.CursorPosition = new(col, row);
 		SView.InitTree([root, addressBar, textView]);
 	}
 }

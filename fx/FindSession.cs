@@ -9,16 +9,17 @@ using Terminal.Gui;
 using Terminal.Gui.Trees;
 
 namespace fx;
-public class FindSession : ITab {
-	public string TabName => "Find";
-	public View TabView => root;
+public class FindSession {
 	public View root;
 	public TreeView<IFind> tree;
 	FindFilter filter = new();
 	public TextField rootBar;
 	private Ctx ctx;
+
+	private Folder folder;
 	public FindSession (Main main) {
 		ctx = main.ctx;
+		folder = main.folder;
 		Fx fx = ctx.fx;
 		root = new View() {
 			X = 0,
@@ -167,8 +168,20 @@ public class FindSession : ITab {
 
 		tree.AddMouse(new() {
 			[MouseFlags.Button3Clicked] = e => {
-				
-				tree.SelectedObject = tree.GetObjectOnRow(e.MouseEvent.Y);
+				var prev = tree.SelectedObject;
+				var row = e.MouseEvent.Y;
+				if(tree.GetObjectOnRow(row) is not { } o)
+					return;
+				tree.SelectedObject = tree.GetObjectOnRow(row);
+				var c = ShowContext(tree.SelectedObject, row);
+				/*
+				c.MenuItems.Children.ToList().ForEach(it => it.Action += () => {
+					int i = 0;
+				});
+				*/
+				c.MenuBar.MenuAllClosed += () => {
+					tree.SelectedObject = prev;
+				};
 				tree.SetNeedsDisplay();
 			},
 		});
@@ -187,7 +200,12 @@ public class FindSession : ITab {
 				}
 				tree.SetNeedsDisplay();
 			}
+		}, new() {
+			['/'] = () => {
+				
+			}
 		});
+
 		void FindFiles () {
 			filter = filter with {
 				filePattern = new(filterBar.Text.ToString()),
@@ -212,6 +230,37 @@ public class FindSession : ITab {
 			replaceLabel, replaceBar, replaceAllButton, replacePrevButton, replaceNextButton,
 			tree
 			]);
+	}
+	ContextMenu ShowContext (IFind item, int row) {
+		var (x, y) = tree.GetCurrentLoc();
+		var c = new ContextMenu(x, y+row, new MenuBarItem(null, [
+			.. GetActions(item)]));
+		c.Show();
+		c.ForceMinimumPosToZero = true;
+		return c;
+	}
+	IEnumerable<MenuItem> GetActions (IFind item) => item switch {
+		FindDir d => GetActions(d),
+		FindFile f => GetActions(f),
+		FindLine l => GetActions(l),
+		_ => throw new Exception()
+	};
+	IEnumerable<MenuItem> GetActions (FindDir d) {
+		yield return new MenuItem("Explore Dir", "", () => {
+			folder.AddTab($"Expl({d.name})", new ExploreSession(null).root, true);
+		});
+	}
+	IEnumerable<MenuItem> GetActions (FindFile f) {
+		yield return new MenuItem("Edit File", "", () => {
+			folder.AddTab($"Edit({f.name})", new EditSession(f.path).root, true);
+		});
+		yield break;
+	}
+	IEnumerable<MenuItem> GetActions(FindLine l) {
+		yield return new MenuItem("Edit Line", "", () => {
+			folder.AddTab($"Edit({l.path})", new EditSession(l.path, l.row, l.col).root, true);
+		});
+		yield break;
 	}
 
 	public void FindDirs () {
