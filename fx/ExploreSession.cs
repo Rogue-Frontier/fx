@@ -67,7 +67,8 @@ public class ExploreSession {
 			Y = 0,
 			Width = Dim.Fill() - 1,
 			Height = 1,
-			ReadOnly = true
+			ReadOnly = true,
+			CanFocus = false
 		};
 		var freqPane = new FrameView("Recents", new() { BorderStyle = BorderStyle.Single, DrawMarginFrame = true, Effect3D = false }) {
 			X = 0,
@@ -507,15 +508,11 @@ public class ExploreSession {
 		}
 		*/
 	}
-
 	public void OnTermEnter(TermEvent e) {
 		if(main.folder.currentBody != root) {
 			return;
 		}
 		var cmd = e.text;
-
-
-
 		//Replace {0} with the first marked path
 		string[] args = cwdData.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
 		if(args.Any()) {
@@ -535,7 +532,7 @@ public class ExploreSession {
 		bool readProc = false;
 		var pi = new ProcessStartInfo("cmd.exe") {
 			WorkingDirectory = cwd,
-			Arguments = @$"/c {cmd} & pause",
+			Arguments = @$"/c {cmd} & pause", 
 			UseShellExecute = true
 		};
 		var p = Process.Start(pi);
@@ -658,6 +655,11 @@ public class ExploreSession {
 			yield return new MenuItem("New Dir", "", createDir, canExecute: () => !item.HasProp(IS_LOCKED));
 			goto Done;
 		}
+
+		yield return new("Edit", null, () => {
+			main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true);
+		});
+
 		if(Path.GetDirectoryName(item.path) is { }par && HasRepo(GetPathItem(par), out string root)) {
 			string local = GetRepoLocal(root, item.path);
 			IEnumerable<string> Paths () {

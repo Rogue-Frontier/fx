@@ -1,6 +1,8 @@
 ﻿using LibGit2Sharp;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -26,7 +28,6 @@ public class FindSession {
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
-			CanFocus = true,
 		};
 		int w = 8;
 		int y = 0;
@@ -214,8 +215,6 @@ public class FindSession {
 			SetFilter(filter);
 		}
 		findAllButton.Clicked += FindLines;
-		//Print button (no replace)
-		FindFiles();
 		SView.InitTree([root,
 			rootLabel, rootBar, rootShowButton,
 			filterLabel, filterBar, filterShowButton,
@@ -265,15 +264,23 @@ public class FindSession {
 	void SetFilter (FindFilter filter) {
 		tree.ClearObjects();
 		tree.TreeBuilder = new TreeFinder(filter);
-		var root = GetRoot();
-		var i = IFind.New(root);
+		var i = IFind.New(GetRoot());
 		if(i is FindDir d) {
 			d.name = d.path;
 		} else if(i is FindFile f) {
 			f.name = f.path;
 		}
 		tree.AddObject(i);
-		tree.ExpandAll();
+
+		/*
+		int row = 0;
+		while(tree.GetObjectOnRow(row) is { } o) {
+			tree.Expand(o);
+			row++;
+		}
+		*/
+		
+		tree.SetNeedsDisplay();
 	}
 	string GetRoot () =>
 		rootBar.Text.ToString().Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE);
@@ -291,70 +298,107 @@ public record FindFilter (Regex filePattern, Regex linePattern, string replace) 
 	public void Replace (string line) => linePattern.Replace(line, replace);
 }
 public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
+
+
+	ConcurrentDictionary<IFind, bool> HasLeavesDict = new();
+	ConcurrentDictionary<IFind, List<IFind>> ChildrenDict = new();
+
 	public bool SupportsCanExpand => true;
-	public bool CanExpand (IFind i) => i switch {
+	public bool CanExpand (IFind i) => HasLeavesDict.GetOrAdd(i, i => i switch {
 		FindDir d =>
-			filter.filePattern != null || filter.linePattern != null ?
-				GetLeaves(d).Any() :
-				GetChildren(d).Any(),
-		FindFile f => GetChildren(f).Any(),
-		FindLine => false
-	};
-	//private bool CanShow (IFind f) => CanShow(f as dynamic);
-	private bool CanShow (FindDir d) => true;
-	private bool CanShow (FindFile f) => filter.Accept(f) && (filter.linePattern == null || GetChildren(f).Any());
-	private bool CanShow (FindLine d) => filter.linePattern != null;
-	public IEnumerable<IFind> GetChildren (IFind f) => GetChildren(f as dynamic);
-	private IEnumerable<IFind> GetChildren (FindDir d) => [
-		.. Directory.GetDirectories(d.path).Select(FindDir.New).Where(CanShow),
-		.. Directory.GetFiles(d.path).Select(FindFile.New).Where(CanShow),
-	];
-	private IEnumerable<IFind> GetChildren(FindFile f) {
-		IEnumerable<string> lines = [];
-		try {
-			lines = File.ReadLines(f.path);
-		} catch(IOException e) {}
-		if(filter.linePattern is { }lp) {
-			foreach(var (row, line) in lines.Index()) {
-				if(lp.Match(line) is { Success: true } match) {
-					yield return new FindLine(f.path, row, match.Index, line, match.Value);
-				}
-			}
-		}
+			GetLeavesOrSelf(d).Except([d]).Any(),
+		FindFile f =>
+			GetLeavesOrSelf(f).Except([f]).Any(),
+		FindLine => false,
+	});
+	public IEnumerable<IFind> GetChildren (IFind i) =>
+		ChildrenDict.TryGetValue(i, out var ch) ?
+			ch :
+			(i switch {
+				FindDir d => GetChildren(d),
+				FindFile f => GetChildren(f),
+				FindLine l => GetChildren(l),
+			});
+	private IEnumerable<IFind> GetChildren (FindDir d) => ChildrenDict.GetOrAdd(d, _ => [
+		.. Directory.GetDirectories(d.path).Select(FindDir.New).Where(HasLeavesOrIsLeaf),
+		.. Directory.GetFiles(d.path).Select(FindFile.New).Where(HasLeavesOrIsLeaf),
+	]);
+	private bool HasLeavesOrIsLeaf (FindFile f) {
+
+		var hasKey = HasLeavesDict.TryGetValue(f, out var b);
+		if(b) 
+			return true;
+
+		var leaves = GetLeavesOrSelf(f);
+		b = leaves.Any();
+		if(!b && !hasKey)
+			HasLeavesDict[f] = false;
+		return b;
 	}
-	private IEnumerable<IFind> GetChildren(FindLine l) => Enumerable.Empty<IFind>();
-	private IEnumerable<IFind> GetAll (FindDir d) => [
-		.. Directory.GetDirectories(d.path).Select(FindDir.New),
-		.. Directory.GetFiles(d.path).Select(FindFile.New),
-	];
+	private bool HasLeavesOrIsLeaf (FindDir d) {
+		var hasKey = HasLeavesDict.TryGetValue(d, out var b);
+		if(b)
+			return true;
+
+		var leaves = GetLeavesOrSelf(d);
+		b = leaves.Any();
+		if(!b && !hasKey)
+			HasLeavesDict[d] = false;
+		return b;
+	}
+	private IEnumerable<IFind> GetChildren (FindFile f) => ChildrenDict.GetOrAdd(f, _ => {
+		if(filter.linePattern is not { } lp) {
+			return [];
+		}
+		try {
+			return File.ReadLines(f.path)
+				.Select((line, row) => (row, line, match: lp.Match(line)))
+				.Where(p => p.match.Success)
+				.Select(p => new FindLine(f.path, p.row, p.match.Index, p.line, p.match.Value)).Cast<IFind>().ToList();
+		} catch(IOException e) {
+
+		} finally {
+
+		}
+		return [];
+	});
+	private IEnumerable<IFind> GetChildren(FindLine l) => ChildrenDict[l] = Enumerable.Empty<IFind>().ToList();
+	
+	
+	
 	private IEnumerable<IFind> GetLeaves (IFind i) => i switch {
-		FindDir d => GetLeaves(d),
-		FindFile f => GetLeaves(f),
+		FindDir d => GetLeavesOrSelf(d),
+		FindFile f => GetLeavesOrSelf(f),
 		_ => Enumerable.Empty<IFind>()
 	};
-	private IEnumerable<IFind> GetLeaves (FindDir dir) {
-		
+	private IEnumerable<IFind> GetLeavesOrSelf (FindDir dir) {
+
 		var subDir = Directory.GetDirectories(dir.path);
-		var subDirLeaves = subDir.SelectMany(d => GetLeaves(new FindDir(d)));
+		var subDirLeaves = subDir.SelectMany(d => GetLeavesOrSelf(new FindDir(d))).ToList();
 		//Leaf type: Dir
-		if(filter.filePattern == null) {
+		if(filter.filePattern is not { }fp) {
 			if(subDir.Any()) {
 				return subDirLeaves;
 			}
 			return [dir];
 		}
-		var subFile = Directory.GetFiles(dir.path);
-		var subFileLeaves = subFile.SelectMany(f => GetLeaves(new FindFile(f)));
+		var subFile = Directory.GetFiles(dir.path).Where(f => fp.Match(f).Success);
+		var subFileLeaves = subFile
+			.SelectMany(f => GetLeavesOrSelf(new FindFile(f))).ToList();
 		return [.. subDirLeaves, .. subFileLeaves];
 	}
-	private IEnumerable<IFind> GetLeaves(FindFile f) {
+	private IEnumerable<IFind> GetLeavesOrSelf(FindFile f) {
 		if(filter.linePattern is not { }lp) {
 			return [f];
 		}
-		return File.ReadAllLines(f.path)
-			.Select((line, index) => (line, index, match:lp.Match(line)))
-			.Where(pair => pair.match.Success)
-			.Select(pair => new FindLine(f.path, pair.index, pair.match.Index, pair.line, pair.match.Value));
+		try {
+			return File.ReadAllLines(f.path)
+				.Select((line, index) => (line, index, match: lp.Match(line)))
+				.Where(pair => pair.match.Success)
+				.Select(pair => new FindLine(f.path, pair.index, pair.match.Index, pair.line, pair.match.Value));
+		} catch(Exception e) {
+			return [];
+		}
 	}
 }
 public interface IFind {

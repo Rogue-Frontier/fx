@@ -64,9 +64,8 @@ public class Main {
 	public void FindIn (string path) {
 		var find = new FindSession(this, path);
 		folder.AddTab($"Find {path}", find.root, true);
-		find.rootBar.ReadOnly = true;
+		find.rootBar.SetLock(true);
 		find.FindDirs();
-		find.tree.ExpandAll();
 	}
 	public Main () {
 		ctx = new Ctx();
@@ -87,11 +86,11 @@ public class Main {
 			},
 		};
 		term.Leave += e => {
-			SetTerm(false);
+			term.SetLock();
 		};
 		term.KeyDown += e => {
 			if(e.KeyEvent.Key == Key.Esc) {
-				SetTerm(false);
+				term.SetLock();
 				e.Handled = true;
 			} else if(e.KeyEvent.Key == Key.Enter) {
 				var ev = new TermEvent(term);
@@ -122,7 +121,8 @@ public class Main {
 				X = 0,
 				Y = Pos.AnchorEnd(3),
 				Width = Dim.Fill(),
-				Height = 3
+				Height = 3,
+				CanFocus = false
 			};
 			InitTree([view, term]);
 			return view;
@@ -173,8 +173,7 @@ public class Main {
 			['<'] = _ => folder.SwitchTab(-1),
 			['>'] = _ => folder.SwitchTab(1),
 			[':'] = _ => {
-				term.CanFocus = true;
-				term.ReadOnly = false;
+				term.SetLock(false);
 				term.SetFocus();
 			}
 		});
@@ -197,13 +196,9 @@ public class Main {
 	}
 	public void FocusTerm () {
 		if(term.ReadOnly) {
-			SetTerm();
+			term.SetLock(false);
 		}
 		term.SetFocus();
-	}
-	public void SetTerm(bool enabled = true) {
-		term.ReadOnly = !enabled;
-		term.CanFocus = enabled;
 	}
 }
 //public record Session(Fx state, Ctx temp);
@@ -287,6 +282,17 @@ public record Ctx {
 	}
 }
 public static class SView {
+
+
+	public static void SetLock(this TextView v, bool locked = true) {
+		v.ReadOnly = locked;
+		v.CanFocus = !locked;
+	}
+	public static void SetLock (this TextField v, bool locked = true) {
+		v.ReadOnly = locked;
+		v.CanFocus = !locked;
+	}
+
 	public static Delegate Bind<T, U>(this T del, params object[] args) where T: System.Delegate{
 		Type[] par = [..typeof(T).GetMethod("Invoke").GetParameters().Select(par => par.ParameterType)];
 		Type[] unbound = par[args.Length..];
