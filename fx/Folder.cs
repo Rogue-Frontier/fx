@@ -6,6 +6,8 @@ using fx;
 namespace fx;
 public record Folder {
 	public View root, head, body;
+
+	public View? currentBody => body.Subviews.SingleOrDefault();
 	private List<View> bars = new();
 	private List<Tab> tabsList = new();
 	private Dictionary<View, Tab> tabs = new();
@@ -72,7 +74,7 @@ public record Folder {
 		if(tabs.Remove(view, out var tab)) {
 			int index = tabsList.IndexOf(tab);
 			tabsList.Remove(tab);
-			if(body.Subviews.SingleOrDefault() is { } v) {
+			if(currentBody is { } v) {
 				if(v == view) {
 					body.RemoveAll();
 
@@ -98,16 +100,17 @@ public record Folder {
 		}
 		tab.Refresh(true);
 	}
-	public void NextTab () {
-		if(tabsList.Count == 0) {
+	public void SwitchTab (int inc = 1) {
+		var c = tabsList.Count;
+		if(c == 0) {
 			return;
 		}
-		if(body.Subviews.SingleOrDefault() is { } v) {
+		if(currentBody is { } v) {
 			var tab = tabs[v];
-			if(tabsList.Count == 1) {
+			if(c == 1) {
 				return;
 			}
-			var next = tabsList[(tabsList.IndexOf(tab) + 1) % tabsList.Count];
+			var next = tabsList[(tabsList.IndexOf(tab) + inc + c) % c];
 			FocusTab(next);
 		} else {
 			FocusTab(tabsList[0]);
@@ -118,8 +121,6 @@ public record Folder {
 		body.Add(view);
 	}
 }
-
-
 public record Tab {
 	public string name;
 	public View view;
@@ -169,7 +170,7 @@ public record Tab {
 			Height = 1,
 		};
 		InitTree([[head, tab, rightBar]]);
-		Refresh(folder.body.Subviews.SingleOrDefault() == view);
+		Refresh(folder.currentBody == view);
 	}
 	public void Refresh (bool open = false) {
 		if(open) {

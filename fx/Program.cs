@@ -42,18 +42,21 @@ try {
 } finally {
 	Application.Shutdown();
 }
+
+
 public class Main {
 	public Ctx ctx;
 	public View[] root;
+
 	public TextField term;
 	public Folder folder;
 	public bool readProc = false;
 	private ExploreSession exploreSession;
+	public Action<TermEvent> TermEnter = default;
+
+
 	public void ReadProc(Process proc) {
 		//TerminalView.cs
-	}
-	public void EditFile (FindLine line) {
-
 	}
 	public bool GoPath(string path) {
 		return false;
@@ -65,15 +68,10 @@ public class Main {
 		find.FindDirs();
 		find.tree.ExpandAll();
 	}
-	public void FocusTerm () {
-		term.SetFocus();
-	}
 	public Main () {
 		ctx = new Ctx();
 		ctx.Load();
-
 		var fx = ctx.fx;
-
 		term = new TextField() {
 			X = 0,
 			Y = 0,
@@ -88,42 +86,36 @@ public class Main {
 				HotNormal = new(Color.Red, Color.Black),
 			},
 		};
-		term.OnKeyPress(e => {
-			var t = (string)term.Text;
-
-			var cwd = "";
-			return e.KeyEvent.Key switch {
-				Key.Enter when t.MatchArray("cd (?<dest>.+)") is [_, { } dest] => delegate {
-					if(!GoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
+		term.Leave += e => {
+			SetTerm(false);
+		};
+		term.KeyDown += e => {
+			if(e.KeyEvent.Key == Key.Esc) {
+				SetTerm(false);
+				e.Handled = true;
+			} else if(e.KeyEvent.Key == Key.Enter) {
+				var ev = new TermEvent(term);
+				foreach(var listen in TermEnter.GetInvocationList()) {
+					listen.DynamicInvoke(ev);
+					if(ev.Handled) {
+						e.Handled = true;
 						return;
 					}
-					term.Text = "";
 				}
-				,
-				Key.Enter when t == "cut" => () => {
-					var items = exploreSession.GetMarkedItems().ToArray();
-				},
-				Key.Enter when t.Any() => delegate {
-					var cmd = $"{t}";
-					var pi = new ProcessStartInfo("cmd.exe") {
-						WorkingDirectory = cwd,
-						Arguments = @$"/c {cmd} & pause",
-						UseShellExecute = !readProc,
-						RedirectStandardOutput = readProc,
-						RedirectStandardError = readProc,
-					};
-					var p = new Process() {
-						StartInfo = pi
-					};
-					Task.Run(() => {
-						p.Start();
-						if(readProc) {
-							ReadProc(p);
-						}
-					});
-				},
-				_ => null
-			};
+			}
+		};
+		term.MouseClick += e => {
+			if(e.MouseEvent.Flags == MouseFlags.Button1Clicked) {
+				if(!term.HasFocus) {
+					FocusTerm();
+					e.Handled = true;
+				}
+			}
+		};
+		term.AddKey(key: new() {
+			[Key.CursorUp] = e => e.Handled = true,
+			[Key.CursorDown] = e => e.Handled = true,
+
 		});
 		var termBar = new Lazy<View>(() => {
 			var view = new FrameView("Term", new Border() { BorderStyle = BorderStyle.Single, Effect3D = false, DrawMarginFrame = true }) {
@@ -162,9 +154,7 @@ public class Main {
 			InitTree([view, text]);
 			return view;
 		}).Value;
-		
-		foreach(var(name, view) in
-		new Dictionary<string, View>() {
+		foreach(var(name, view) in new Dictionary<string, View>() {
 			["Home"] = homeSession.root,
 			["Expl"] = exploreSession.root
 		}) {
@@ -180,11 +170,13 @@ public class Main {
 		};
 
 		window.AddKey(value: new() {
-			['{'] = () => {
-
-				return;
-			},
-			['}'] = folder.NextTab
+			['<'] = _ => folder.SwitchTab(-1),
+			['>'] = _ => folder.SwitchTab(1),
+			[':'] = _ => {
+				term.CanFocus = true;
+				term.ReadOnly = false;
+				term.SetFocus();
+			}
 		});
 
 		InitTree([
@@ -202,6 +194,16 @@ public class Main {
 			]
 		};
 		root = [window, windowMenuBar];
+	}
+	public void FocusTerm () {
+		if(term.ReadOnly) {
+			SetTerm();
+		}
+		term.SetFocus();
+	}
+	public void SetTerm(bool enabled = true) {
+		term.ReadOnly = !enabled;
+		term.CanFocus = enabled;
 	}
 }
 //public record Session(Fx state, Ctx temp);
@@ -303,7 +305,7 @@ public static class SView {
 		}
 		return (x,y);
 	}
-	public static void AddKey (this View v, Dictionary<Key, Action> key = null, Dictionary<int, Action> value = null) =>
+	public static void AddKey (this View v, Dictionary<Key, Action<KeyEventEventArgs>> key = null, Dictionary<int, Action<KeyEventEventArgs>> value = null) =>
 		v.KeyPress += e => {
 			var action =
 				key?.TryGetValue(e.KeyEvent.Key, out var a) == true ?
@@ -312,7 +314,7 @@ public static class SView {
 					a :
 					null;
 			e.Set(action != null);
-			action ?.Invoke ();
+			action ?.Invoke (e);
 		};
 	public static void AddMouse (this View v, Dictionary<MouseFlags, Action<MouseEventArgs>> dict) =>
 		v.MouseClick += e => {
@@ -360,7 +362,7 @@ public static class SView {
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
 
 
-	public static ContextMenu ShowContext (this View view, PathItem item, int row = 0, MenuItem[] actions) {
+	public static ContextMenu ShowContext (this View view, MenuItem[] actions, int row = 0) {
 		var (x, y) = view.GetCurrentLoc();
 		var c = new ContextMenu(x, y + row, new MenuBarItem(null, actions));
 		c.Show();

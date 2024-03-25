@@ -25,7 +25,7 @@ using System.Xml.Linq;
 namespace fx;
 public class ExploreSession {
 	public View root;
-	private Ctx ctx;
+	private Ctx ctx => main.ctx;
 	private Fx fx => ctx.fx;
 
 
@@ -43,11 +43,16 @@ public class ExploreSession {
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
 	private string cwdRecall = null;
+
+	private Main main;
 	public ExploreSession (Main main, string initCwd) {
-		ctx = main.ctx;
+		this.main = main;
 		this.cwd = initCwd;
 		var favData = new List<PathItem>();
 		var procData = new List<ProcItem>();
+
+		main.TermEnter += OnTermEnter;
+
 		root = new View() {
 			X = 0,
 			Y = 0,
@@ -254,9 +259,8 @@ public class ExploreSession {
 					Key.Enter or Key.CursorRight => () => GoItem(),
 					Key.CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
 					Key.Tab => () => {
-						if(!GetItem(out var p)) return;
-						main.term.Text = p.local;
-						main.term.SetFocus();
+						main.FocusTerm();
+						main.term.Text += $"{{{pathList.SelectedItem}}}";
 					}
 					,
 					/*
@@ -292,7 +296,7 @@ public class ExploreSession {
 						'.' => () => {
 							var c = ShowContext(GetPathItem(cwd), -2);
 							c.MenuBar.AddKey(value: new() {
-								{ '.', c.Hide }
+								{ '.', _ => c.Hide() }
 							});
 						}
 						,
@@ -379,7 +383,7 @@ public class ExploreSession {
 			procList.AddKey(new() {
 				[Key.CursorLeft] = default,
 				[Key.CursorRight] = default,
-				[Key.Backspace] = () => {
+				[Key.Backspace] = _ => {
 					if(!(procList.SelectedItem < procData.Count))
 						return;
 					var p = procData[procList.SelectedItem];
@@ -388,7 +392,7 @@ public class ExploreSession {
 					procList.SetNeedsDisplay();
 				}
 			}, new() {
-				['\''] = UpdateProcesses
+				['\''] = _ => UpdateProcesses()
 			});
 
 			gitList.OpenSelectedItem += e => {
@@ -400,21 +404,16 @@ public class ExploreSession {
 				RefreshChanges();
 				gitList.SelectedItem = e.Item;
 			};
-
-			gitList.AddMouse(new() {
-				[MouseFlags.Button3Clicked] = e => {
-					var prev = gitList.SelectedItem;
-					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
-
-					gitList.SetNeedsDisplay();
-				}
-			});
-
-
 			gitList.AddMouse(new() {
 				[MouseFlags.Button1Clicked] = e => {
 					
 					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
+					gitList.SetNeedsDisplay();
+				},
+				[MouseFlags.Button3Clicked] = e => {
+					var prev = gitList.SelectedItem;
+					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
+
 					gitList.SetNeedsDisplay();
 				}
 			});
@@ -429,7 +428,6 @@ public class ExploreSession {
 				_ => null
 			});
 			*/
-			
 			ContextMenu ShowContext (PathItem item, int row = 0) {
 				var (x, y) = pathList.GetCurrentLoc();
 				var c = new ContextMenu(x, y+row, new MenuBarItem(null, [
@@ -438,10 +436,6 @@ public class ExploreSession {
 				c.ForceMinimumPosToZero = true;
 				return c;
 			}
-			
-			bool GetIndex (out int i) =>
-				(i = Math.Min(cwdData.Count - 1, pathList.SelectedItem)) != -1;
-			
 			bool GoPrev (int times = 1) => Enumerable.Range(0, times).All(_ => {
 				if(cwdPrev is { Last: { Value: { }prev } }l) {
 					l.RemoveLast();
@@ -494,9 +488,7 @@ public class ExploreSession {
 					}
 					RunCmd(main, i.path);
 				}
-
 			}
-			
 		}
 		void InitCwd () {
 			SetCwd(cwd);
@@ -514,8 +506,43 @@ public class ExploreSession {
 			if(MouseClick != null) AddMouseClick(view, MouseClick);
 		}
 		*/
-		
-		
+	}
+
+	public void OnTermEnter(TermEvent e) {
+		if(main.folder.currentBody != root) {
+			return;
+		}
+		var cmd = e.text;
+
+
+
+		//Replace {0} with the first marked path
+		string[] args = cwdData.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
+		if(args.Any()) {
+			cmd = string.Format(cmd, args);
+		} else {
+			//cmd = string.Format(cmd, cwdData[pathList.SelectedItem].local);
+			cmd = string.Format(cmd, [..cwdData.Select(p => p.local)]);
+		}
+
+		if(cmd.MatchArray("cd (?<dest>.+)") is [_, { } dest]) {
+			if(!GoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
+
+			}
+			goto Handled;
+		}
+
+		bool readProc = false;
+		var pi = new ProcessStartInfo("cmd.exe") {
+			WorkingDirectory = cwd,
+			Arguments = @$"/c {cmd} & pause",
+			UseShellExecute = true
+		};
+		var p = Process.Start(pi);
+
+		Handled:
+		e.term.Text = "";
+		e.Handled = true;
 	}
 	public IEnumerable<int> GetMarkedIndex () =>
 		Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
@@ -688,7 +715,7 @@ public class ExploreSession {
 			create.Enabled = e.NewText.Any();
 		};
 		input.AddKey(new() {
-			[Key.Enter] = create.OnClicked
+			[Key.Enter] = _ => create.OnClicked()
 		});
 		create.Clicked += () => {
 			if(accept(input.Text.ToString())) {
