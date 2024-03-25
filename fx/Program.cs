@@ -29,6 +29,7 @@ using System.Reflection.Emit;
 using Label = Terminal.Gui.Label;
 using static Terminal.Gui.TabView;
 using Folder = fx.Folder;
+using System.Collections.Concurrent;
 try {
 	Application.Init();
 	Application.UseSystemConsole = true;
@@ -58,9 +59,8 @@ public class Main {
 		return false;
 	}
 	public void FindIn (string path) {
-		var find = new FindSession(this);
-		folder.AddTab($"Find({path})", find.root, true);
-		find.rootBar.Text = path;
+		var find = new FindSession(this, path);
+		folder.AddTab($"Find {path}", find.root, true);
 		find.rootBar.ReadOnly = true;
 		find.FindDirs();
 		find.tree.ExpandAll();
@@ -90,9 +90,11 @@ public class Main {
 		};
 		term.OnKeyPress(e => {
 			var t = (string)term.Text;
+
+			var cwd = "";
 			return e.KeyEvent.Key switch {
 				Key.Enter when t.MatchArray("cd (?<dest>.+)") is [_, { } dest] => delegate {
-					if(!GoPath(Path.GetFullPath(Path.Combine(fx.cwd, dest)))) {
+					if(!GoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
 						return;
 					}
 					term.Text = "";
@@ -104,7 +106,7 @@ public class Main {
 				Key.Enter when t.Any() => delegate {
 					var cmd = $"{t}";
 					var pi = new ProcessStartInfo("cmd.exe") {
-						WorkingDirectory = fx.cwd,
+						WorkingDirectory = cwd,
 						Arguments = @$"/c {cmd} & pause",
 						UseShellExecute = !readProc,
 						RedirectStandardOutput = readProc,
@@ -143,7 +145,7 @@ public class Main {
 			Width = Dim.Fill(),
 			Height = Dim.Fill(3),
 		});
-		exploreSession = new ExploreSession(this);
+		exploreSession = new ExploreSession(this, Environment.CurrentDirectory);
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
 		var termView = new Lazy<View>(() => {
@@ -206,11 +208,7 @@ public class Main {
 public record Fx {
 	public const string				SAVE_PATH = "fx.state.yaml";
 	public const string				WORK_ROOT = "%WORKROOT%";
-	public string					cwd =		Environment.CurrentDirectory;
-	public LinkedList<string>		cwdPrev =	new();
-	public LinkedList<string>		cwdNext =	new();
 	public HashSet<string>			locked =	new();
-	public Dictionary<string, int>	lastIndex = new();
 	public List<string>				pinned =	new();
 
 	public string					workroot =	null;
@@ -224,7 +222,6 @@ public record Fx {
 				foreach(var f in GetType().GetFields( BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)) {
 					f.Copy(this, o);
 				}
-				lastIndex = new(lastIndex);
 			}
 #if false
 			catch {
@@ -245,6 +242,9 @@ public record Ctx {
 	public Command[] Commands { get; private set; }
 	public Sln sln;
 	public Fx fx = new();
+
+	public ConcurrentDictionary<string, PathItem> pathData = new();
+
 	public Ctx () {
 		ResetCommands();
 	}
@@ -358,6 +358,15 @@ public static class SView {
 	public static void Handle (this KeyEventEventArgs e, Func<KeyEventEventArgs, bool> f) => e.Handled = f(e);
 	*/
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
+
+
+	public static ContextMenu ShowContext (this View view, PathItem item, int row = 0, MenuItem[] actions) {
+		var (x, y) = view.GetCurrentLoc();
+		var c = new ContextMenu(x, y + row, new MenuBarItem(null, actions));
+		c.Show();
+		c.ForceMinimumPosToZero = true;
+		return c;
+	}
 }
 
 public delegate Action? KeyEv (KeyEventEventArgs e);

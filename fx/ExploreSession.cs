@@ -27,13 +27,14 @@ public class ExploreSession {
 	public View root;
 	private Ctx ctx;
 	private Fx fx => ctx.fx;
-	//Keep old data around since we might use the properties
-	ConcurrentDictionary<string, PathItem> pathData = new();
-	/// <summary>Temporary</summary>
+
+
+	public Dictionary<string, int> lastIndex = new();
+	public string cwd = Environment.CurrentDirectory;
+	public LinkedList<string> cwdPrev = new();
+	public LinkedList<string> cwdNext = new();
 	private List<PathItem> cwdData = new();
-	/// <summary>Temporary</summary>
 	Dictionary<string, GitItem> gitMap = new();
-	/// <summary>Temporary</summary>		
 	private List<GitItem> gitData = new();
 	private Pad goPrev, goNext, goLeft;
 	private TextField addressBar;
@@ -42,8 +43,9 @@ public class ExploreSession {
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
 	private string cwdRecall = null;
-	public ExploreSession (Main main) {
+	public ExploreSession (Main main, string initCwd) {
 		ctx = main.ctx;
+		this.cwd = initCwd;
 		var favData = new List<PathItem>();
 		var procData = new List<ProcItem>();
 		root = new View() {
@@ -207,12 +209,12 @@ public class ExploreSession {
 		void InitEvents () {
 			goPrev.AddMouse(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
-					[.. fx.cwdPrev.Select((p, i) => new MenuItem(p, "", () => GoPrev(i + 1)))])).Show(),
+					[.. cwdPrev.Select((p, i) => new MenuItem(p, "", () => GoPrev(i + 1)))])).Show(),
 				[MouseFlags.Button1Pressed] = e => e.Set(GoPrev())
 			});
 			goNext.AddMouse(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu(e.MouseEvent.View, new(
-					[.. fx.cwdNext.Select((p, i) => new MenuItem(p, "", () => GoNext(i + 1)))])).Show(),
+					[.. cwdNext.Select((p, i) => new MenuItem(p, "", () => GoNext(i + 1)))])).Show(),
 				[MouseFlags.Button1Pressed] = e => e.Set(GoNext())
 			});
 			goLeft.AddMouse(new() {
@@ -250,7 +252,7 @@ public class ExploreSession {
 				if(!pathList.HasFocus) return null;
 				return e.KeyEvent.Key switch {
 					Key.Enter or Key.CursorRight => () => GoItem(),
-					Key.CursorLeft => () => GoPath(Path.GetDirectoryName(fx.cwd)),
+					Key.CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
 					Key.Tab => () => {
 						if(!GetItem(out var p)) return;
 						main.term.Text = p.local;
@@ -288,7 +290,7 @@ public class ExploreSession {
 						}
 						,
 						'.' => () => {
-							var c = ShowContext(GetPathItem(fx.cwd), -2);
+							var c = ShowContext(GetPathItem(cwd), -2);
 							c.MenuBar.AddKey(value: new() {
 								{ '.', c.Hide }
 							});
@@ -336,7 +338,7 @@ public class ExploreSession {
 						,
 						'@' => () => {
 							//set dir as workroot
-							fx.workroot = fx.workroot != fx.cwd ? fx.cwd : null;
+							fx.workroot = fx.workroot != cwd ? cwd : null;
 							RefreshCwd();
 						}
 						,
@@ -399,9 +401,19 @@ public class ExploreSession {
 				gitList.SelectedItem = e.Item;
 			};
 
+			gitList.AddMouse(new() {
+				[MouseFlags.Button3Clicked] = e => {
+					var prev = gitList.SelectedItem;
+					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
+
+					gitList.SetNeedsDisplay();
+				}
+			});
+
 
 			gitList.AddMouse(new() {
 				[MouseFlags.Button1Clicked] = e => {
+					
 					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
 					gitList.SetNeedsDisplay();
 				}
@@ -418,9 +430,9 @@ public class ExploreSession {
 			});
 			*/
 			
-			ContextMenu ShowContext (PathItem item, int yInc = 0) {
+			ContextMenu ShowContext (PathItem item, int row = 0) {
 				var (x, y) = pathList.GetCurrentLoc();
-				var c = new ContextMenu(x, y+yInc, new MenuBarItem(Path.GetFileName(item.path), [
+				var c = new ContextMenu(x, y+row, new MenuBarItem(null, [
 					.. GetActions(main, item)]));
 				c.Show();
 				c.ForceMinimumPosToZero = true;
@@ -431,9 +443,9 @@ public class ExploreSession {
 				(i = Math.Min(cwdData.Count - 1, pathList.SelectedItem)) != -1;
 			
 			bool GoPrev (int times = 1) => Enumerable.Range(0, times).All(_ => {
-				if(fx.cwdPrev is { Last: { Value: { }prev } }l) {
+				if(cwdPrev is { Last: { Value: { }prev } }l) {
 					l.RemoveLast();
-					fx.cwdNext.AddLast(fx.cwd);
+					cwdNext.AddLast(cwd);
 					SetCwd(prev);
 					RefreshPads();
 					return true;
@@ -441,9 +453,9 @@ public class ExploreSession {
 				return false;
 			});
 			bool GoNext (int times = 1) => Enumerable.Range(0, times).All(_ => {
-				if(fx.cwdNext is { Last:{Value:{ }next} }l) {
+				if(cwdNext is { Last:{Value:{ }next} }l) {
 					l.RemoveLast();
-					fx.cwdPrev.AddLast(fx.cwd);
+					cwdPrev.AddLast(cwd);
 					SetCwd(next);
 					RefreshPads();
 					return true;
@@ -452,7 +464,7 @@ public class ExploreSession {
 			});
 			bool GoLeft (int times = 1) =>
 				Enumerable.Range(0, times).All(
-					_ => Path.GetFullPath(Path.Combine(fx.cwd, "..")) is { } s && s != fx.cwd && GoPath(s));
+					_ => Path.GetFullPath(Path.Combine(cwd, "..")) is { } s && s != cwd && GoPath(s));
 			void GoItem () {
 				if(!(pathList.SelectedItem < cwdData.Count)) {
 					return;
@@ -487,7 +499,7 @@ public class ExploreSession {
 			
 		}
 		void InitCwd () {
-			SetCwd(fx.cwd);
+			SetCwd(cwd);
 		}
 		void UpdateProcesses () {
 			procData.Clear();
@@ -536,7 +548,7 @@ public class ExploreSession {
 		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
 		var cmdArgs = @$"/c {cmd}";
 		var pi = new ProcessStartInfo("cmd.exe") {
-			WorkingDirectory = fx.cwd,
+			WorkingDirectory = cwd,
 			Arguments = $"{cmdArgs}",
 			UseShellExecute = true,
 			WindowStyle = ProcessWindowStyle.Hidden,
@@ -689,8 +701,8 @@ public class ExploreSession {
 		Application.Run(d);
 	}
 	PathItem GetPathItem (string path) {
-		return pathData[path] =
-			pathData.TryGetValue(path, out var item) ?
+		return ctx.pathData[path] =
+			ctx.pathData.TryGetValue(path, out var item) ?
 				new PathItem(item.local, item.path, new(GetProps(path))) :
 				new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
 	}
@@ -707,7 +719,7 @@ public class ExploreSession {
 				if(path != root && !item.HasProp(IN_REPOSITORY)) {
 					var next = ((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path));
 					//TO DO: fix adding attributes
-					pathData[path] = new(item.local, item.path, new([.. item.propSet, next]));
+					ctx.pathData[path] = new(item.local, item.path, new([.. item.propSet, next]));
 				}
 				RefreshChanges();
 			} else {
@@ -718,7 +730,7 @@ public class ExploreSession {
 		} else if(Repository.IsValid(path)) {
 			//Mark this directory as a known repository.
 
-			pathData[path] = new(item.local, item.path, new([.. item.propSet, IS_REPOSITORY]));
+			ctx.pathData[path] = new(item.local, item.path, new([.. item.propSet, IS_REPOSITORY]));
 			SetRepo(path);
 			RefreshChanges();
 		} else if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoFile, out var prop)) {
@@ -728,7 +740,7 @@ public class ExploreSession {
 				RefreshChanges();
 			} else {
 				//Error
-				pathData[path] = new(item.local, item.path, new(item.propSet.Except([prop])));
+				ctx.pathData[path] = new(item.local, item.path, new(item.propSet.Except([prop])));
 			}
 		}
 	}
@@ -765,7 +777,7 @@ public class ExploreSession {
 	void RefreshAddressBar () {
 		var anonymize = true;
 		var userProfile = ctx.USER_PROFILE;
-		var showCwd = fx.cwd;
+		var showCwd = cwd;
 		if(fx.workroot is { } root) {
 			showCwd = showCwd.Replace(root, Fx.WORK_ROOT);
 			userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
@@ -777,16 +789,16 @@ public class ExploreSession {
 		addressBar.Text = showCwd;
 		Console.Title = showCwd;
 
-		pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), fx.lastIndex.GetValueOrDefault(fx.cwd, 0));
+		pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), lastIndex.GetValueOrDefault(cwd, 0));
 		pathList.SetNeedsDisplay();
 	}
 	void RefreshCwd () {
-		var path = fx.cwd;
-		fx.lastIndex[path] = pathList.SelectedItem;
+		var path = cwd;
+		lastIndex[path] = pathList.SelectedItem;
 		//Refresh the repo in case it got deleted for some reason
 		RefreshRepo(path);
 		RefreshListing(path);
-		if(pathData[fx.cwd].HasProp(IN_REPOSITORY)) {
+		if(ctx.pathData[cwd].HasProp(IN_REPOSITORY)) {
 			RefreshChanges();
 		}
 		RefreshAddressBar();
@@ -795,18 +807,18 @@ public class ExploreSession {
 		var path = Path.GetFullPath(dest);
 		RefreshRepo(path);
 		RefreshListing(path);
-		fx.lastIndex[fx.cwd] = pathList.SelectedItem;
-		fx.cwd = path;
+		lastIndex[cwd] = pathList.SelectedItem;
+		cwd = path;
 		RefreshAddressBar();
 	}
 	bool GoPath (string? dest) {
-		var f = Path.GetFileName(fx.cwd);
+		var f = Path.GetFileName(cwd);
 		if(fx.workroot is { } root && !dest.Contains(root)) {
 			return false;
 		}
 		if(Directory.Exists(dest)) {
-			fx.cwdNext.Clear();
-			fx.cwdPrev.AddLast(fx.cwd);
+			cwdNext.Clear();
+			cwdPrev.AddLast(cwd);
 			SetCwd(dest);
 			RefreshPads();
 			if(cwdData.FindIndex(p => p.local == f) is {}ind and not -1) {
@@ -820,10 +832,10 @@ public class ExploreSession {
 		SView.ForTuple((Pad pad, IEnumerable<string> items) => {
 			pad.Enabled = items.Any();
 		}, [
-			(goLeft, Up()), (goNext, fx.cwdNext), (goPrev, fx.cwdPrev)
+			(goLeft, Up()), (goNext, cwdNext), (goPrev, cwdPrev)
 		]);
 	private IEnumerable<string> Up () {
-		var curr = Path.GetDirectoryName(fx.cwd);
+		var curr = Path.GetDirectoryName(cwd);
 		while(curr != null) {
 			yield return curr;
 			curr = Path.GetDirectoryName(curr);
@@ -866,66 +878,6 @@ public class ExploreSession {
 	private void SetRepo(string root) {
 		git = new(root, new Repository(root));
 	}
-}
-public interface IProp {
-	string id { get; }
-	string desc { get; }
-}
-/// <summary>
-/// Standard properties used within fx
-/// </summary>
-/// <remarks>
-/// Be careful not to assign <see cref="IS_REPOSITORY"/> or <see cref="IN_REPOSITORY"/> outside <see cref="ExploreSession.RefreshRepo(string)"/>. The repository is updated before the cwd listing.
-/// </remarks>
-public static class Props {
-	public static IProp
-		IS_LOCKED =		new Prop("locked", "Locked"),
-		IS_DIRECTORY =	new Prop("directory", "Directory"),
-		IS_STAGED =		new Prop("gitStagedChanges", "- Staged Changes"),
-		IS_UNSTAGED =	new Prop("gitUnstagedChanges", "- Unstaged Changes"),
-		IS_SOLUTION =	new Prop("visualStudioSolution", "Visual Studio Solution"),
-		IS_REPOSITORY = new Prop("gitRepositoryRoot", "Git Repository"),
-		IS_ZIP =		new Prop("zipArchive", "Zip Archive");
-	public static IPropGen
-		IN_REPOSITORY = new PropGen<RepoItem>("gitRepositoryItem", pair => $"In Repository: {pair.root}"),
-		IS_LINK_TO =	new PropGen<string>	("link",				dest => $"Link To: {dest}"),
-		IN_LIBRARY =	new PropGen<Library>("libraryItem",			library => $"In Library: {library.name}"),
-		IN_SOLUTION =	new PropGen<string>	("solutionItem",		solutionPath => $"In Solution: {solutionPath}"),
-		IN_ZIP =		new PropGen<string>	("zipItem",				zipRoot => $"In Zip: {zipRoot}");
-
-	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
-	public static string GetRepoLocal (this Repository repo, string path) => path.Replace(repo.GetRoot() + Path.DirectorySeparatorChar, null);
-	public static string GetRepoLocal (string root, string path) => path.Replace(root + Path.DirectorySeparatorChar, null);
-	public static RepoItem CalcRepoItem (this Repository repo, string path) => CalcRepoItem(repo.GetRoot(), path);
-	public static RepoItem CalcRepoItem (string root, string path) =>
-		new(root, GetRepoLocal(root, path));
-
-	public static bool HasRepo(PathItem item, out string root) {
-		if(item.HasProp(IS_REPOSITORY)) {
-			root = item.path;
-			return true;
-		}
-		if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoItem)) {
-			root = repoItem.root;
-			return true;
-		}
-		root = null;
-		return false;
-	}
-
-	/// <summary>Identifies a repository-contained file by local path and repository root</summary>
-	public record RepoItem (string root, string local) {}
-}
-public record Prop (string id, string desc) : IProp {}
-public record Prop<T> (string id, string desc, T data) : IProp {}
-public interface IPropGen {
-	string id { get; }
-	public Prop<T> Make<T> (T data) => ((PropGen<T>)this).Generate(data);
-
-}
-public record PropGen<T> (string id, PropGen<T>.GetDesc getDesc) : IPropGen {
-	public delegate string GetDesc (T args);
-	public Prop<T> Generate (T args) => new Prop<T>(id, getDesc(args), args);
 }
 public record ProcItem (Process p) {
 	public override string ToString () => $"{p.ProcessName,-24}{p.Id,-8}";

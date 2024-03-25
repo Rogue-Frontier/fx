@@ -42,8 +42,4 @@
   program: np
   targetAny:
     file:
-      - ext: xml
-      - ext: json
-      - ext: txt
-      - ext: gitignore
-      - pattern: .*
+      - ext: xml|json|txt|gitignore

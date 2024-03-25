@@ -16,10 +16,10 @@ public class FindSession {
 	public TextField rootBar;
 	private Ctx ctx;
 
-	private Folder folder;
-	public FindSession (Main main) {
+	private Main main;
+	public FindSession (Main main, string path) {
 		ctx = main.ctx;
-		folder = main.folder;
+		this.main = main;
 		Fx fx = ctx.fx;
 		root = new View() {
 			X = 0,
@@ -35,7 +35,7 @@ public class FindSession {
 			Y = y,
 			Width = w
 		};
-		rootBar = new TextField(fx.cwd.Replace(ctx.USER_PROFILE, Ctx.USER_PROFILE_MASK)) {
+		rootBar = new TextField(path) {
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
@@ -247,18 +247,18 @@ public class FindSession {
 	};
 	IEnumerable<MenuItem> GetActions (FindDir d) {
 		yield return new MenuItem("Explore Dir", "", () => {
-			folder.AddTab($"Expl({d.name})", new ExploreSession(null).root, true);
+			main.folder.AddTab($"Expl({d.name})", new ExploreSession(main, d.path).root, true);
 		});
 	}
 	IEnumerable<MenuItem> GetActions (FindFile f) {
 		yield return new MenuItem("Edit File", "", () => {
-			folder.AddTab($"Edit({f.name})", new EditSession(f.path).root, true);
+			main.folder.AddTab($"Edit {f.name}", new EditSession(f.path).root, true);
 		});
 		yield break;
 	}
 	IEnumerable<MenuItem> GetActions(FindLine l) {
 		yield return new MenuItem("Edit Line", "", () => {
-			folder.AddTab($"Edit({l.path})", new EditSession(l.path, l.row, l.col).root, true);
+			main.folder.AddTab($"Edit {l.path}", new EditSession(l.path, l.row, l.col).root, true);
 		});
 		yield break;
 	}

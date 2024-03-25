@@ -34,7 +34,7 @@ public record TargetAny () : ITarget {
 public record TargetFile () : ITarget {
 	[StringSyntax("Regex")]
 	public string pattern = ".+";
-	public string ext { set => pattern = $"[^\\.]*\\.{value}$"; }
+	public string ext { set => pattern = $"[^\\.]*\\.({value})$"; }
 	public bool Accept (string path) {
 		return !Conditions().Contains(false);
 		IEnumerable<bool> Conditions () {
