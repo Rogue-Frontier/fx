@@ -8,7 +8,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Terminal.Gui;
-using Terminal.Gui.Trees;
 
 namespace fx;
 public class FindSession {
@@ -31,93 +30,139 @@ public class FindSession {
 		};
 		int w = 8;
 		int y = 0;
-		var rootLabel = new Label("Dir") {
+		var rootLabel = new Label() {
+			AutoSize = false,
+			Title= "Dir",
 			X = 0,
 			Y = y,
-			Width = w
+			Width = w,
+			Height = 1
 		};
-		rootBar = new TextField(path) {
+		rootBar = new TextField() {
+			AutoSize = false,
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
+			Height = 1,
+			Text = path
 		};
 
-		var rootShowButton = new Button("All", false) {
+		var rootShowButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(rootBar),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height = 1,
+			Text = "Find"
 		};
 		y++;
-		var filterLabel = new Label("File") {
+		var filterLabel = new Label() {
+			AutoSize = false,
 			X = 0,
 			Y = y,
-			Width = w
+			Width = w,
+			Height = 1,
+			Text = "File"
 		};
 		var filterBar = new TextField() {
+			AutoSize = false,
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
+			Height = 1,
 		};
-		var filterShowButton = new Button("All", false) {
+		var filterShowButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(filterBar),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height = 1,
+			Text = "Find"
 		};
 		y++;
-		var findLabel = new Label("Text") {
+		var findLabel = new Label() {
+			AutoSize = false,
 			X = 0,
 			Y = y,
-			Width = w
+			Width = w,
+			Height = 1,
+			Text = "Line"
 		};
 		var findBar = new TextField() {
+			AutoSize = false,
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
+			Height = 1,
 		};
-		var findAllButton = new Button("All", false) {
+		var findAllButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(findBar),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height = 1,
+			Text = "Find"
 		};
-		var findPrevButton = new Button("<-", false) {
+		var findPrevButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(findAllButton),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height = 1,
+			Text = "<-"
 		};
-		var findNextButton = new Button("->", false) {
+		var findNextButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(findPrevButton),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height = 1,
+			Text = "->"
 		};
 		y++;
-		var replaceLabel = new Label("Replace") {
+		var replaceLabel = new Label() {
+			AutoSize = false,
 			X = 0,
 			Y = y,
-			Width = w
+			Width = w,
+			Height = 1,
+			Text = "Replace"
 		};
 		var replaceBar = new TextField() {
+			AutoSize = false,
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
+			Height = 1
 		};
-		var replaceAllButton = new Button("All", false) {
+		var replaceAllButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(findBar),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height=1,
+			Text = "Replace"
 		};
-		var replacePrevButton = new Button("<-", false) {
+		var replacePrevButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(findAllButton),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height=1,
+			Text = "<-"
 		};
-		var replaceNextButton = new Button("->", false) {
+		var replaceNextButton = new Button() {
+			AutoSize = false,
 			X = Pos.Right(findPrevButton),
 			Y = y,
-			Width = 6
+			Width = 6,
+			Height=1,
+			Text = "->"
 		};
 		y++;
 		y++;
 		tree = new TreeView<IFind>(new TreeFinder(filter)) {
+
 			X = 0,
 			Y = y,
 			Width = Dim.Fill(0),
@@ -128,21 +173,21 @@ public class FindSession {
 				FindLine l => $"{l.row,3}|{l.line}"
 			}
 		};
-		tree.ObjectActivated += e => {
+		tree.ObjectActivated += (a, e) => {
 			if(e.ActivatedObject is FindLine l) {
 				//main.EditFile(l);
 			}
 		};
-		root.AddKey(new() {
-			[Key.DeleteChar] = _=> {
+		root.KeyDownD(new() {
+			[KeyCode.Delete] = _ => {
 				int i = 0;
 			},
-			[Key.Esc] = _=> {
+			[KeyCode.Esc] = _ => {
 				main.folder.RemoveTab(root);
 			}
 		});
-		root.AddKey(new() {
-			[Key.Esc] = _=> {
+		root.KeyDownD(new() {
+			[KeyCode.Esc] = _=> {
 				main.folder.RemoveTab(root);
 			}
 		}, new() {
@@ -150,38 +195,43 @@ public class FindSession {
 				main.folder.SwitchTab();
 			}
 		});
-		rootBar.AddKey(new() {
-			[Key.Enter] = _ => FindDirs()
+		rootBar.KeyDownD(new() {
+			[KeyCode.Enter] = _ => FindDirs()
 		});
-		filterBar.AddKey(new() {
-			[Key.Enter] = _ => FindFiles()
+		filterBar.KeyDownD(new() {
+			[KeyCode.Enter] = _ => FindFiles()
 		});
-		findBar.AddKey(new() {
-			[Key.Enter] = _ => FindLines()
+		findBar.KeyDownD(new() {
+			[KeyCode.Enter] = _ => FindLines()
 		});
-		rootShowButton.Clicked += FindDirs;
-		filterShowButton.Clicked += FindFiles;
-		tree.AddMouse(new() {
+
+		rootShowButton.MouseEvD(new() {
+			[MouseFlags.Button1Pressed] = _ => FindDirs()
+		});
+		filterShowButton.MouseEvD(new() {
+			[MouseFlags.Button1Pressed] = _ => FindFiles()
+		});
+		tree.MouseClickD(new() {
 			[MouseFlags.Button3Clicked] = e => {
 				var prev = tree.SelectedObject;
 				var row = e.MouseEvent.Y;
 				if(tree.GetObjectOnRow(row) is not { } o)
 					return;
 				tree.SelectedObject = tree.GetObjectOnRow(row);
-				var c = ShowContext(tree.SelectedObject, row);
+				var c = ShowContext(tree.SelectedObject, row - 1, e.MouseEvent.X);
 				/*
 				c.MenuItems.Children.ToList().ForEach(it => it.Action += () => {
 					int i = 0;
 				});
 				*/
-				c.MenuBar.MenuAllClosed += () => {
+				c.MenuBar.MenuAllClosed += (object? a, EventArgs e) => {
 					tree.SelectedObject = prev;
 				};
 				tree.SetNeedsDisplay();
 			},
 		});
-		tree.AddKey(new() {
-			[Key.CursorRight] = _ => {
+		tree.KeyDownD(new() {
+			[KeyCode.CursorRight] = _ => {
 				if(!tree.IsExpanded(tree.SelectedObject)) {
 					if(!tree.CanExpand(tree.SelectedObject)) {
 						return;
@@ -197,7 +247,7 @@ public class FindSession {
 			}
 		}, new() {
 			['/'] = _=> {
-				
+				//TODO SHOW CONTEXT
 			}
 		});
 		void FindFiles () {
@@ -214,7 +264,9 @@ public class FindSession {
 			};
 			SetFilter(filter);
 		}
-		findAllButton.Clicked += FindLines;
+		findAllButton.MouseEvD(new() {
+			[MouseFlags.Button1Pressed] = _ => FindLines()
+		});
 		SView.InitTree([root,
 			rootLabel, rootBar, rootShowButton,
 			filterLabel, filterBar, filterShowButton,
@@ -223,23 +275,28 @@ public class FindSession {
 			tree
 			]);
 	}
-	ContextMenu ShowContext (IFind item, int row) {
+	ContextMenu ShowContext (IFind item, int row, int col = 0) {
 		var (x, y) = tree.GetCurrentLoc();
-		var c = new ContextMenu(x, y+row, new MenuBarItem(null, [
-			.. GetActions(item)]));
+		var c = new ContextMenu() {
+			MenuItems = new(null, [
+			.. GetActions(item)]),
+			Position = new(x + col, y + row)
+		};
 		c.Show();
 		c.ForceMinimumPosToZero = true;
 		return c;
 	}
-	IEnumerable<MenuItem> GetActions (IFind item) => item switch {
-		FindDir d => GetActions(d),
-		FindFile f => GetActions(f),
-		FindLine l => GetActions(l),
-		_ => throw new Exception()
-	};
+	IEnumerable<MenuItem> GetActions (IFind item) => [..(item switch {
+			FindDir d => GetActions(d),
+			FindFile f => GetActions(f),
+			FindLine l => GetActions(l),
+			_ => throw new Exception()
+		}),
+		..ExploreSession.GetGeneralActions(main, ctx.GetCachedPathItem(item.path, ExploreSession.GetStaticProps))
+	];
 	IEnumerable<MenuItem> GetActions (FindDir d) {
 		yield return new MenuItem("Explore Dir", "", () => {
-			main.folder.AddTab($"Expl({d.name})", new ExploreSession(main, d.path).root, true);
+			main.folder.AddTab($"Expl {d.name}", new ExploreSession(main, d.path).root, true);
 		});
 	}
 	IEnumerable<MenuItem> GetActions (FindFile f) {
@@ -402,6 +459,8 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 	}
 }
 public interface IFind {
+
+	string path { get; }
 	public static IFind New (string path) =>
 		Directory.Exists(path) ?
 			new FindDir(path) :

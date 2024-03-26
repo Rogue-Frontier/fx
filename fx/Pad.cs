@@ -1,5 +1,4 @@
-﻿using NStack;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -21,9 +20,6 @@ public class Pad : View {
 	//     Client code can hook up to this event, it is raised when the button is activated
 	//     either with the mouse or the keyboard.
 	public event Action Clicked;
-	public Pad (ustring text)
-	: base(text) {
-	}
 	//
 	// Summary:
 	//     Method invoked when a mouse event is generated
@@ -33,13 +29,13 @@ public class Pad : View {
 	//
 	// Returns:
 	//     true, if the event was handled, false otherwise.
-	public override bool OnMouseEvent (MouseEvent mouseEvent) {
-		MouseEventArgs args = new MouseEventArgs(mouseEvent);
+	protected override bool OnMouseEvent (MouseEvent mouseEvent) {
+		var args = new MouseEventEventArgs(mouseEvent);
 		if(OnMouseClick(args)) {
 			return true;
 		}
 
-		if(MouseEvent(mouseEvent)) {
+		if(OnMouseEvent(mouseEvent)) {
 			return true;
 		}
 

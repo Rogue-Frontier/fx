@@ -6,7 +6,6 @@ using System.Collections;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
-using System.Management;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
@@ -16,7 +15,6 @@ using YamlDotNet;
 using YamlDotNet.Serialization;
 using View = Terminal.Gui.View;
 using static SView;
-using Terminal.Gui.Trees;
 using System.IO;
 using System.IO.Compression;
 using IWshRuntimeLibrary;
@@ -30,9 +28,10 @@ using Label = Terminal.Gui.Label;
 using static Terminal.Gui.TabView;
 using Folder = fx.Folder;
 using System.Collections.Concurrent;
+using System.Drawing;
+using Attribute = Terminal.Gui.Attribute;
 try {
 	Application.Init();
-	Application.UseSystemConsole = true;
 	var main = new Main();
 	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
 		main.ctx.Save();
@@ -63,22 +62,15 @@ public class Main {
 			Width = Dim.Fill(),
 			Height = 1,
 			DesiredCursorVisibility = CursorVisibility.Box,
-			ColorScheme = new() {
-				Normal = new(Color.Red, Color.Black),
-				Focus = new(Color.White, Color.Black),
-				HotFocus = new(Color.Red, Color.Black),
-				Disabled = new(Color.Red, Color.Black),
-				HotNormal = new(Color.Red, Color.Black),
-			},
 		};
-		term.Leave += e => {
+		term.Leave += (a, e) => {
 			term.SetLock();
 		};
-		term.KeyDown += e => {
-			if(e.KeyEvent.Key == Key.Esc) {
+		term.KeyDown += (a, e) => {
+			if(e == Key.Esc) {
 				term.SetLock();
 				e.Handled = true;
-			} else if(e.KeyEvent.Key == Key.Enter) {
+			} else if(e == Key.Enter) {
 				var ev = new TermEvent(term);
 				foreach(var listen in TermEnter.GetInvocationList()) {
 					listen.DynamicInvoke(ev);
@@ -89,7 +81,7 @@ public class Main {
 				}
 			}
 		};
-		term.MouseClick += e => {
+		term.MouseClick += (a, e) => {
 			if(e.MouseEvent.Flags == MouseFlags.Button1Clicked) {
 				if(!term.HasFocus) {
 					FocusTerm();
@@ -97,22 +89,25 @@ public class Main {
 				}
 			}
 		};
-		term.AddKey(key: new() {
-			[Key.CursorUp] = e => e.Handled = true,
-			[Key.CursorDown] = e => e.Handled = true,
+		term.KeyDownD(key: new() {
+			[KeyCode.CursorUp] = e => e.Handled = true,
+			[KeyCode.CursorDown] = e => e.Handled = true,
 		});
 		var termBar = new Lazy<View>(() => {
-			var view = new FrameView("Term", new Border() { BorderStyle = BorderStyle.Single, Effect3D = false, DrawMarginFrame = true }) {
+			var view = new FrameView() {
+
+				Title = "Term",
 				X = 0,
 				Y = Pos.AnchorEnd(3),
 				Width = Dim.Fill(),
 				Height = 3,
-				CanFocus = false
+				CanFocus = false,
+				BorderStyle = LineStyle.Single
 			};
 			InitTree([view, term]);
 			return view;
 		}).Value;
-		var homeSession = new HomeSession();
+		var homeSession = new HomeSession(this);
 		//Add context button to switch to Find with root at dir
 		//Add button to treat dir as root
 		//Add option for treeview
@@ -150,10 +145,12 @@ public class Main {
 			Y = 0,
 			Width = Dim.Fill(0),
 			Height = Dim.Fill(0),
-			Border = { BorderStyle = BorderStyle.None, Effect3D = false, DrawMarginFrame = false },
+			BorderStyle = LineStyle.Single,
 			Title = "fx",
 		};
-		window.AddKey(value: new() {
+		window.KeyDownD(key:new() {
+			[KeyCode.Delete] = _ => folder.RemoveTab(),
+		},  value: new() {
 			['<'] = _ => folder.SwitchTab(-1),
 			['>'] = _ => folder.SwitchTab(1),
 			[':'] = _ => {
@@ -188,8 +185,10 @@ public record Fx {
 	public const string		SAVE_PATH = "fx.state.yaml";
 	public const string		WORK_ROOT = "%WORKROOT%";
 	public HashSet<string>	locked =	new();
-	public List<string>		pinned =	new();
-	public string			workroot =	null;
+	public List<string>		pins =	new();
+	public string			workroot =	null; //move to ExplorerSession
+
+	public List<Library>	libraryData = new();
 	public Fx () { }
 	public Fx (Ctx ctx) =>	Load(ctx);
 	public void Load (Ctx ctx) {
@@ -236,6 +235,18 @@ public record Ctx {
 		Commands
 			.Where(c => c.Accept(item.path))
 			.Select(c => new MenuItem(c.name, "", () => ExploreSession.RunCmd(c.GetCmd(item.path))));
+
+	public delegate IEnumerable<IProp> GetProps (string path);
+	public PathItem GetPathItem(string path, GetProps GetProps) =>
+		pathData[path] =
+			pathData.TryGetValue(path, out var item) ?
+				new PathItem(item.local, item.path, new(GetProps(path))) :
+				new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
+	public PathItem GetCachedPathItem (string path, GetProps GetProps) =>
+		pathData[path] =
+			pathData.TryGetValue(path, out var item) ?
+				item :
+				new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
 	public record Git {
 		public string root => repo.GetRoot();
 		public Repository repo { get; }
@@ -270,32 +281,39 @@ public static class SView {
 		}
 		return (x,y);
 	}
-	public static void AddKey (this View v, Dictionary<Key, Action<KeyEventEventArgs>> key = null, Dictionary<int, Action<KeyEventEventArgs>> value = null) =>
-		v.KeyPress += e => {
-			var action =
-				key?.TryGetValue(e.KeyEvent.Key, out var a) == true ?
-					a :
-				value?.TryGetValue(e.KeyEvent.KeyValue, out a) == true ?
-					a :
-					null;
-			e.Set(action != null);
+	public static Point GetCurrentPos (this View v) {
+		var (x, y) = (0, 0);
+		while(v != null) {
+			var f = v.Frame;
+			(x, y) = (f.X + x, f.Y + y);
+			v = v.SuperView;
+		}
+		return new(x, y);
+	}
+	public static void KeyDownD (this View v, Dictionary<KeyCode, Action<Key>> key = null, Dictionary<int, Action<Key>> value = null) =>
+		v.KeyDown += (_, e) => {
+			var action = key?.GetValueOrDefault(e.KeyCode) ?? value?.GetValueOrDefault(e.AsRune.Value);
+			e.Handled = action != null;
 			action ?.Invoke (e);
 		};
-	public static void AddMouse (this View v, Dictionary<MouseFlags, Action<MouseEventArgs>> dict) =>
-		v.MouseClick += e => {
-			var action =
-				dict.TryGetValue(e.MouseEvent.Flags, out var a) ?
-					a :
-					null;
-			e.Set(action != null);
+	public static void MouseEvD (this View v, Dictionary<MouseFlags, Action<MouseEventEventArgs>> dict) =>
+		v.MouseEvent += (_, e) => {
+			var action = dict.GetValueOrDefault(e.MouseEvent.Flags);
+			e.Handled = action != null;
 			action?.Invoke(e);
 		};
-	public static void OnKeyPress (this View v, KeyEv f) =>
-		v.KeyPress += DoRun(d => f(d));
-	public static void OnMouseClick (this View v, MouseEv f) =>
-		v.MouseClick += DoRun(d=>f(d));
-	private static Action<dynamic> DoRun(Func<dynamic, Action> f) =>
-		e => Run(e, f);
+	public static void MouseClickD (this View v, Dictionary<MouseFlags, Action<MouseEventEventArgs>> dict) =>
+		v.MouseClick += (_, e) => {
+			var action = dict.GetValueOrDefault(e.MouseEvent.Flags);
+			e.Handled = action != null;
+			action?.Invoke(e);
+		};
+	public static void KeyDownF (this View v, KeyEv f) =>
+		v.KeyDown += DoRun<Key>(d => f(d));
+	public static void MouseEvF (this View v, MouseEv f) =>
+		v.MouseEvent += DoRun<MouseEventEventArgs>(d=>f(d));
+	private static EventHandler<T> DoRun<T>(Func<T, Action> f) =>
+		(_, e) => Run(e, d => f(d));
 	private static void Run (dynamic e, Func<dynamic, Action> f) {
 		Action a = f(e);
 		e.Handled = (a != null);
@@ -314,8 +332,6 @@ public static class SView {
 			action.DynamicInvoke(args);
 		}
 	}
-	public static void Set (this MouseEventArgs e, bool b = true) => e.Handled = b;
-	public static void Set (this KeyEventEventArgs e, bool b = true) => e.Handled = b;
 	/*
 	public static void Handle (this MouseEventArgs e, Func<bool> f) => e.Handled = f();
 	public static void Handle (this KeyEventEventArgs e, Func<bool> f) => e.Handled = f();
@@ -323,13 +339,16 @@ public static class SView {
 	public static void Handle (this KeyEventEventArgs e, Func<KeyEventEventArgs, bool> f) => e.Handled = f(e);
 	*/
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
-	public static ContextMenu ShowContext (this View view, MenuItem[] actions, int row = 0) {
+	public static ContextMenu ShowContext (this View view, MenuItem[] actions, int row = 0, int col = 0) {
 		var (x, y) = view.GetCurrentLoc();
-		var c = new ContextMenu(x, y + row, new MenuBarItem(null, actions));
+		var c = new ContextMenu() {
+			Position = new(x + col, y + row),
+			MenuItems = new MenuBarItem(null, actions)
+		};
 		c.Show();
 		c.ForceMinimumPosToZero = true;
 		return c;
 	}
 }
-public delegate Action? KeyEv (KeyEventEventArgs e);
-public delegate Action? MouseEv (MouseEventArgs e);
+public delegate Action? KeyEv (Key e);
+public delegate Action? MouseEv (MouseEventEventArgs e);

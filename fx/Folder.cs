@@ -48,7 +48,8 @@ public record Folder {
 	}
 	public void Refresh () {
 		head.RemoveAll();
-		var barLeft = new View(" ") {
+		var barLeft = new View() {
+			Title = " ",
 			X = 0,
 			Y = 0,
 			Width = 1,
@@ -70,7 +71,8 @@ public record Folder {
 		}
 		return tab;
 	}
-	public void RemoveTab(View view) {
+	public bool RemoveTab () => RemoveTab(currentBody);
+	public bool RemoveTab(View view) {
 		if(tabs.Remove(view, out var tab)) {
 			int index = tabsList.IndexOf(tab);
 			tabsList.Remove(tab);
@@ -87,7 +89,9 @@ public record Folder {
 				}
 			}
 			Refresh();
+			return true;
 		}
+		return false;
 	}
 
 	public void FocusTab(Tab tab) {
@@ -139,34 +143,35 @@ public record Tab {
 		var head = folder.head;
 		leftBar = head.Subviews.Last();
 		tab = new Lazy<View>(() => {
-			var root = new Pad(name) {
+			var root = new Label() {
+				AutoSize = false,
+				Title = name,
 				X = Pos.Right(leftBar),
 				Y = 0,
 				Height = 1,
 				Width = name.Length + 3,
 			};
-			root.MouseClick += e => {
-				if(e.MouseEvent.Flags == MouseFlags.Button1Pressed) {
-					folder.FocusTab(this);
-				}
-			};
+			root.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+				[MouseFlags.Button1Pressed] = _ => folder.FocusTab(this)
+			});
 
-			var kill = new Pad("[X]") {
+			var kill = new Label() {
+				Title = "[X]",
 				X = Pos.AnchorEnd(3),
 				Y = 0,
-				Width = 3,
-				Height = 1
 			};
-			kill.Clicked += () => {
-				folder.RemoveTab(view);
-			};
+			kill.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+				[MouseFlags.Button1Pressed] = _ => folder.RemoveTab(view)
+			});
 			InitTree([[root, kill]]);
 			return root;
 		}).Value;
 
-		rightBar = new View(" ") {
-			X = Pos.Right(tab),
+		rightBar = new View() {
+			Title = "%",
+			X = Pos.Right(tab) + 0,
 			Y = 0,
+			Width = 1,
 			Height = 1,
 		};
 		InitTree([[head, tab, rightBar]]);
