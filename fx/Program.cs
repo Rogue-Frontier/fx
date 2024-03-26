@@ -42,30 +42,16 @@ try {
 } finally {
 	Application.Shutdown();
 }
-
-
 public class Main {
 	public Ctx ctx;
 	public View[] root;
-
 	public TextField term;
 	public Folder folder;
 	public bool readProc = false;
 	private ExploreSession exploreSession;
 	public Action<TermEvent> TermEnter = default;
-
-
 	public void ReadProc(Process proc) {
 		//TerminalView.cs
-	}
-	public bool GoPath(string path) {
-		return false;
-	}
-	public void FindIn (string path) {
-		var find = new FindSession(this, path);
-		folder.AddTab($"Find {path}", find.root, true);
-		find.rootBar.SetLock(true);
-		find.FindDirs();
 	}
 	public Main () {
 		ctx = new Ctx();
@@ -114,7 +100,6 @@ public class Main {
 		term.AddKey(key: new() {
 			[Key.CursorUp] = e => e.Handled = true,
 			[Key.CursorDown] = e => e.Handled = true,
-
 		});
 		var termBar = new Lazy<View>(() => {
 			var view = new FrameView("Term", new Border() { BorderStyle = BorderStyle.Single, Effect3D = false, DrawMarginFrame = true }) {
@@ -168,7 +153,6 @@ public class Main {
 			Border = { BorderStyle = BorderStyle.None, Effect3D = false, DrawMarginFrame = false },
 			Title = "fx",
 		};
-
 		window.AddKey(value: new() {
 			['<'] = _ => folder.SwitchTab(-1),
 			['>'] = _ => folder.SwitchTab(1),
@@ -177,7 +161,6 @@ public class Main {
 				term.SetFocus();
 			}
 		});
-
 		InitTree([
 			[window, folder.root, termBar]
 		]);
@@ -189,8 +172,7 @@ public class Main {
 				new MenuItem("Reload", "", ctx.ResetCommands)
 			]){
 				CanExecute = () => true
-			}
-			]
+			}]
 		};
 		root = [window, windowMenuBar];
 	}
@@ -203,16 +185,14 @@ public class Main {
 }
 //public record Session(Fx state, Ctx temp);
 public record Fx {
-	public const string				SAVE_PATH = "fx.state.yaml";
-	public const string				WORK_ROOT = "%WORKROOT%";
-	public HashSet<string>			locked =	new();
-	public List<string>				pinned =	new();
-
-	public string					workroot =	null;
+	public const string		SAVE_PATH = "fx.state.yaml";
+	public const string		WORK_ROOT = "%WORKROOT%";
+	public HashSet<string>	locked =	new();
+	public List<string>		pinned =	new();
+	public string			workroot =	null;
 	public Fx () { }
-	public Fx (Ctx ctx) => Load(ctx);
+	public Fx (Ctx ctx) =>	Load(ctx);
 	public void Load (Ctx ctx) {
-
 		if(File.Exists(SAVE_PATH)) {
 			try {
 				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE));
@@ -225,9 +205,7 @@ public record Fx {
 				File.Delete(SAVE_PATH);
 			}
 #endif
-			finally {
-
-			}
+			finally {}
 		}
 	}
 }
@@ -239,41 +217,34 @@ public record Ctx {
 	public Command[] Commands { get; private set; }
 	public Sln sln;
 	public Fx fx = new();
-
 	public ConcurrentDictionary<string, PathItem> pathData = new();
-
-	public Ctx () {
+	public Ctx () =>
 		ResetCommands();
-	}
-	public void Load () {
+	public void Load () =>
 		fx.Load(this);
-	}
-	public void Save () {
+	public void Save () =>
 		File.WriteAllText(Fx.SAVE_PATH, se.Serialize(fx).Replace(USER_PROFILE, USER_PROFILE_MASK));
-	}
 	public void ResetCommands () {
-		var d = Directory.CreateDirectory($"Programs");
-		var programs = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{d.FullName}.yaml"));
-		foreach((var name, var path) in programs) {
+		var d = Directory.CreateDirectory($"Executables");
+		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{d.FullName}.yaml"));
+		foreach((var name, var path) in executables) {
 			File.WriteAllText($"{d.FullName}/{name}", path);
 		}
 		Commands = de.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
 	}
+	public IEnumerable<MenuItem> GetCommands (PathItem item) =>
+		Commands
+			.Where(c => c.Accept(item.path))
+			.Select(c => new MenuItem(c.name, "", () => ExploreSession.RunCmd(c.GetCmd(item.path))));
 	public record Git {
 		public string root => repo.GetRoot();
 		public Repository repo { get; }
 		public Patch patch { get; private set; }
-		public Git (string path) {
+		public Git (string path) =>
 			repo = new(path);
-		}
-		public void RefreshPatch () {
+		public void RefreshPatch ()=>
 			patch = repo.Diff.Compare<Patch>();
-		}
 	}
-
-
-
-
 	public record Sln {
 		public string root;
 		public Sln (string path) {
@@ -282,8 +253,6 @@ public record Ctx {
 	}
 }
 public static class SView {
-
-
 	public static void SetLock(this TextView v, bool locked = true) {
 		v.ReadOnly = locked;
 		v.CanFocus = !locked;
@@ -291,16 +260,6 @@ public static class SView {
 	public static void SetLock (this TextField v, bool locked = true) {
 		v.ReadOnly = locked;
 		v.CanFocus = !locked;
-	}
-
-	public static Delegate Bind<T, U>(this T del, params object[] args) where T: System.Delegate{
-		Type[] par = [..typeof(T).GetMethod("Invoke").GetParameters().Select(par => par.ParameterType)];
-		Type[] unbound = par[args.Length..];
-
-		var name = typeof(T).GetType().Name;
-
-		typeof(Action<,,,,>).MakeGenericType();
-		return null;
 	}
 	public static (int, int) GetCurrentLoc(this View v) {
 		var (x, y) = (0, 0);
@@ -330,13 +289,11 @@ public static class SView {
 					null;
 			e.Set(action != null);
 			action?.Invoke(e);
-
 		};
 	public static void OnKeyPress (this View v, KeyEv f) =>
 		v.KeyPress += DoRun(d => f(d));
 	public static void OnMouseClick (this View v, MouseEv f) =>
 		v.MouseClick += DoRun(d=>f(d));
-
 	private static Action<dynamic> DoRun(Func<dynamic, Action> f) =>
 		e => Run(e, f);
 	private static void Run (dynamic e, Func<dynamic, Action> f) {
@@ -366,8 +323,6 @@ public static class SView {
 	public static void Handle (this KeyEventEventArgs e, Func<KeyEventEventArgs, bool> f) => e.Handled = f(e);
 	*/
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
-
-
 	public static ContextMenu ShowContext (this View view, MenuItem[] actions, int row = 0) {
 		var (x, y) = view.GetCurrentLoc();
 		var c = new ContextMenu(x, y + row, new MenuBarItem(null, actions));
@@ -376,6 +331,5 @@ public static class SView {
 		return c;
 	}
 }
-
 public delegate Action? KeyEv (KeyEventEventArgs e);
 public delegate Action? MouseEv (MouseEventArgs e);

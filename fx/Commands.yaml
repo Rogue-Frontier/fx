@@ -1,6 +1,6 @@
 ---
 - name: Open GitHub
-  fmt: gh repo view --web
+  fmt: cd {0} & gh repo view --web
   targetAny:
     dir:
       - dir:
@@ -26,6 +26,7 @@
       - ext: csproj
   #tag: C# Project
 - name: Open Solution in Visual Studio
+  program: vi
   targetAny:
     dir:
       - file:
@@ -42,4 +43,4 @@
   program: np
   targetAny:
     file:
-      - ext: xml|json|txt|gitignore
+      - ext: xml|json|yaml|log|txt|gitignore

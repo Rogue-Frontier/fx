@@ -30,13 +30,13 @@
     <None Update="Commands.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Update="Programs.yaml">
+    <None Update="Executables.yaml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Programs\" />
+    <Folder Include="Executables\" />
   </ItemGroup>
 
 </Project>

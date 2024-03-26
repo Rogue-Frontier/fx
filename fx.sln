@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "cx", "cx\cx.csproj", "{64C6
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "mx", "mx\mx.csproj", "{F86F75A7-1777-4880-B123-37F88C46FE89}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Term", "Terminal.Gui.Override\Term.csproj", "{EBDB2B96-3138-48E8-BCF1-C37D96284826}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{F86F75A7-1777-4880-B123-37F88C46FE89}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F86F75A7-1777-4880-B123-37F88C46FE89}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F86F75A7-1777-4880-B123-37F88C46FE89}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EBDB2B96-3138-48E8-BCF1-C37D96284826}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EBDB2B96-3138-48E8-BCF1-C37D96284826}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EBDB2B96-3138-48E8-BCF1-C37D96284826}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EBDB2B96-3138-48E8-BCF1-C37D96284826}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

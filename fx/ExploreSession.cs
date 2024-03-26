@@ -22,6 +22,7 @@ using static System.Net.Mime.MediaTypeNames;
 using Application = Terminal.Gui.Application;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
+using System.IO;
 namespace fx;
 public class ExploreSession {
 	public View root;
@@ -39,7 +40,7 @@ public class ExploreSession {
 	private Pad goPrev, goNext, goLeft;
 	private TextField addressBar;
 	public ListView pathList;
-	private ListView gitList;
+	private ListView repoList;
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
 	private string cwdRecall = null;
@@ -173,15 +174,13 @@ public class ExploreSession {
 				Disabled = new(Color.Red, Color.Black)
 			}
 		};
-
-		var gitPane = new FrameView("Changes", new() { BorderStyle = BorderStyle.Single, DrawMarginFrame = true, Effect3D = false }) {
+		var repoPane = new FrameView("Repo", new() { BorderStyle = BorderStyle.Single, Effect3D = false }) {
 			X = Pos.Percent(75),
 			Y = Pos.Percent(50),
 			Width = Dim.Percent(25),
 			Height = Dim.Percent(50),
 		};
-
-		gitList = new ListView() {
+		repoList = new ListView() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -196,7 +195,6 @@ public class ExploreSession {
 				Disabled = new(Color.Red, Color.Black)
 			}
 		};
-
 		InitTreeLocal();
 		InitEvents();
 		InitCwd();
@@ -208,8 +206,8 @@ public class ExploreSession {
 				[clipPane],
 				[pathPane, pathList],
 				[procPane, procList],
-				[gitPane, gitList],
-				[root, addressBar, goPrev, goNext, goLeft, freqPane, clipPane, pathPane, /*properties,*/ procPane, gitPane]
+				[repoPane, repoList],
+				[root, addressBar, goPrev, goNext, goLeft, freqPane, clipPane, pathPane, /*properties,*/ procPane, repoPane]
 				);
 		}
 		void InitEvents () {
@@ -396,26 +394,26 @@ public class ExploreSession {
 				['\''] = _ => UpdateProcesses()
 			});
 
-			gitList.OpenSelectedItem += e => {
+			repoList.OpenSelectedItem += e => {
 				var item = gitData[e.Item];
 
 
 				if(item.staged) Commands.Unstage(git.repo, item.local);
 				else Commands.Stage(git.repo, item.local);
 				RefreshChanges();
-				gitList.SelectedItem = e.Item;
+				repoList.SelectedItem = e.Item;
 			};
-			gitList.AddMouse(new() {
+			repoList.AddMouse(new() {
 				[MouseFlags.Button1Clicked] = e => {
 					
-					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
-					gitList.SetNeedsDisplay();
+					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
+					repoList.SetNeedsDisplay();
 				},
 				[MouseFlags.Button3Clicked] = e => {
-					var prev = gitList.SelectedItem;
-					gitList.SelectedItem = gitList.TopItem + e.MouseEvent.Y;
+					var prev = repoList.SelectedItem;
+					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
 
-					gitList.SetNeedsDisplay();
+					repoList.SetNeedsDisplay();
 				}
 			});
 
@@ -487,7 +485,7 @@ public class ExploreSession {
 						GoPath(i.path);
 						return;
 					}
-					RunCmd(main, i.path);
+					RunCmd($"cd {cwd} & {i.path}");
 				}
 			}
 		}
@@ -546,7 +544,7 @@ public class ExploreSession {
 	public IEnumerable<PathItem> GetMarkedItems () =>
 		GetMarkedIndex().Select(i => cwdData[i]);
 
-	void ShowProperties (PathItem item) {
+	public static void ShowProperties (PathItem item) {
 		var d = new Dialog($"Properties: {item.path}", []) {
 			Border = {
 				Effect3D = false
@@ -568,25 +566,24 @@ public class ExploreSession {
 
 		Application.Run(d);
 	}
-	Process RunCmd (Main main, string cmd) {
-		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Programs")}'";
+	/// <summary>
+	/// 
+	/// </summary>
+	/// <param name="cmd">Should not require cwd</param>
+	/// <returns></returns>
+	public static Process RunCmd (string cmd) {
+		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Executables")}'";
 		var cmdArgs = @$"/c {cmd}";
 		var pi = new ProcessStartInfo("cmd.exe") {
-			WorkingDirectory = cwd,
 			Arguments = $"{cmdArgs}",
 			UseShellExecute = true,
 			WindowStyle = ProcessWindowStyle.Hidden,
 		};
-		var p = Process.Start(pi);
-		main.ReadProc(p);
-		return p;
+		return Process.Start(pi);
 	}
-	/// <param name="path">This is strictly a child of cwd.</param>
-	/// <remarks>Strictly called after <see cref="RefreshRepo(string)"/>, so we already know repo props for the parent directory.</remarks>
-	IEnumerable<IProp> GetProps (string path) {
-		if(fx.locked.Contains(path)) {
-			yield return IS_LOCKED;
-		}
+
+
+	public static IEnumerable<IProp> GetStaticProps (string path) {
 		if(Directory.Exists(path)) {
 			yield return IS_DIRECTORY;
 			if(Repository.IsValid(path)) {
@@ -600,11 +597,17 @@ public class ExploreSession {
 				// WshShellClass shell = new WshShellClass();
 				WshShell shell = new WshShell(); //Create a new WshShell Interface
 				IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
-				yield return ((PropGen<string>)IS_LINK_TO).Generate(link.TargetPath);
+				yield return IS_LINK_TO.Make<string>(link.TargetPath);
 			}
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;
 			}
+		}
+	}
+
+	public IEnumerable<IProp> GetInstanceProps(string path) {
+		if(fx.locked.Contains(path)) {
+			yield return IS_LOCKED;
 		}
 		if(Path.GetDirectoryName(path) is { } par && HasRepo(GetPathItem(par), out var root)) {
 			yield return IN_REPOSITORY.Make(CalcRepoItem(root, path));
@@ -617,90 +620,96 @@ public class ExploreSession {
 			}
 		}
 	}
+	/// <param name="path">This is strictly a child of cwd.</param>
+	/// <remarks>Strictly called after <see cref="RefreshRepo(string)"/>, so we already know repo props for the parent directory.</remarks>
+	IEnumerable<IProp> GetProps (string path) =>
+		[..GetInstanceProps(path), .. GetStaticProps(path)];
 
-	IEnumerable<MenuItem> GetActions (Main main, PathItem item) {
+
+	public static IEnumerable<MenuItem> GetGeneralActions (Main main, PathItem item) {
 		//yield return new MenuItem(item.local, null, null, () => false);
 		//yield return new MenuItem("----", null, null, () => false);
-		yield return new MenuItem("Cancel", "", () => { });
 		yield return new MenuItem("Find", null, () => {
-			main.FindIn(item.path);
+			var find = new FindSession(main, item.path);
+			main.folder.AddTab($"Find {item.path}", find.root, true);
+			find.rootBar.SetLock(true);
+			find.FindDirs();
 		});
-
-		yield return new MenuItem("Show in Explorer", "", () => RunCmd(main, @$"explorer.exe /select, ""{item.path}"""));
-
+		if(item.HasProp(IS_DIRECTORY)) {
+			yield return new MenuItem("Open in Explorer", "", () => RunCmd($"explorer.exe {item.path}"));
+		} else {
+			yield return new("Edit", null, () =>
+				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true)
+			);
+		}
+		yield return new MenuItem("Show in Explorer", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""));
+		yield return new("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
+		yield return new MenuItem("Properties", null, () => ShowProperties(item));
+	}
+	public IEnumerable<MenuItem> GetSpecifcActions(Main main, PathItem item) {
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuItem("Remember", "", () => cwdRecall = item.path);
-			yield return new MenuItem("Open in Explorer", "", () => RunCmd(main, $"explorer.exe {item.path}"));
-
-
 			var createFile = () => {
 				RequestName("New File", name => {
 					var f = Path.Combine(item.path, name);
 					File.Create(f);
-					RefreshCwd();
-					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					if(item.path == cwd) {
+						RefreshCwd();
+						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					}
 					return true;
 				});
 			};
 			yield return new MenuItem("New File", "", createFile, canExecute: () => !item.HasProp(IS_LOCKED));
-			var createDir = () => {
+			var createDir = () =>
 				RequestName("New Directory", name => {
 					var f = Path.Combine(item.path, name);
 					Directory.CreateDirectory(f);
-					RefreshCwd();
-					pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+
+					if(item.path == cwd) {
+						RefreshCwd();
+						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					}
 					return true;
 				});
-			};
 			yield return new MenuItem("New Dir", "", createDir, canExecute: () => !item.HasProp(IS_LOCKED));
-			goto Done;
-		}
-
-		yield return new("Edit", null, () => {
-			main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true);
-		});
-
-		if(Path.GetDirectoryName(item.path) is { }par && HasRepo(GetPathItem(par), out string root)) {
-			string local = GetRepoLocal(root, item.path);
-			IEnumerable<string> Paths () {
-				yield return local;
-			}
-			var diff = new MenuItem("Diff", "", () => {
-				using(var repo = new Repository(root)) {
-					var patch = repo.Diff.Compare<Patch>(Paths());
-					Preview($"Diff: {item.path}", patch.Content);
+		} else {
+			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
+				string local = GetRepoLocal(root, item.path);
+				var unstaged = item.HasProp(IS_UNSTAGED);
+				var staged = item.HasProp(IS_STAGED);
+				if(unstaged || staged) {
+					yield return new MenuItem("Diff", "", () => {
+						using(var repo = new Repository(root))
+							Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
+					});
+					if(unstaged) {
+						yield return new MenuItem("Stage", "", () => {
+							using(var repo = new Repository(root))
+								Commands.Stage(repo, local);
+							RefreshCwd();
+						});
+					} else if(staged) {
+						yield return new MenuItem("Unstage", "", () => {
+							using(var repo = new Repository(root))
+								Commands.Unstage(repo, local);
+							RefreshCwd();
+						});
+					}
 				}
-			});
-			if(item.HasProp(IS_UNSTAGED)) {
-				yield return new MenuItem("Stage", "", () => {
-					using(var repo = new Repository(root)) {
-						Commands.Stage(repo, local);
-					}
-					RefreshCwd();
-				});
-				yield return diff;
-			} else if(item.HasProp(IS_STAGED)) {
-				yield return new MenuItem("Unstage", "", () => {
-					using(var repo = new Repository(root)) {
-						Commands.Unstage(repo, local);
-					}
-					RefreshCwd();
-				});
-				yield return diff;
 			}
 		}
-		Done:
-		yield return new("Copy Path", "", () => { Clipboard.TrySetClipboardData(item.path); });
-		foreach(var c in ctx.Commands) {
-			if(c.Accept(item.path))
-				yield return new(c.name, "", () => RunCmd(main, c.GetCmd(item.path)));
-		}
-
-		yield return new MenuItem("Properties", null, () => { ShowProperties(item); });
 	}
+	public IEnumerable<MenuItem> GetActions (Main main, PathItem item) =>
+		
+		
+		[new MenuItem("Cancel", "", () => { }),
+		.. GetSpecifcActions(main, item),
+		.. ctx.GetCommands(item),
+		.. GetGeneralActions (main, item)];
 
 
-	void RequestName (string title, Predicate<string> accept) {
+	public static void RequestName (string title, Predicate<string> accept) {
 		var create = new Button("Create") { Enabled = false };
 		var cancel = new Button("Cancel");
 		var d = new Dialog(title, [
@@ -746,7 +755,7 @@ public class ExploreSession {
 			if(stillInRepo) {
 				//If we're in the repo but not at root, remember that this directory is within the repository
 				if(path != root && !item.HasProp(IN_REPOSITORY)) {
-					var next = ((PropGen<RepoItem>)IN_REPOSITORY).Generate(git.repo.CalcRepoItem(path));
+					var next = IN_REPOSITORY.Make<RepoItem>(git.repo.CalcRepoItem(path));
 					//TO DO: fix adding attributes
 					ctx.pathData[path] = new(item.local, item.path, new([.. item.propSet, next]));
 				}
@@ -798,9 +807,9 @@ public class ExploreSession {
 		var items = GetItems().ToList();
 		gitMap = items.ToDictionary(item => item.path);
 		gitData = items;
-		gitList.SetSource(gitData);
+		repoList.SetSource(gitData);
 		foreach(var (i, it) in gitData.Index()) {
-			gitList.Source.SetMark(i, it.staged);
+			repoList.Source.SetMark(i, it.staged);
 		}
 	}
 	void RefreshAddressBar () {

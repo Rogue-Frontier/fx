@@ -1,0 +1,13 @@
+- id: isGithubRepository
+  targetAny:
+    dir:
+      - dir:
+        - name: .git
+        - name: .github
+- id: isCsproj
+  targetAny:
+    dir:
+      - file:
+          - ext: csproj
+    file:
+      - ext: csproj  
