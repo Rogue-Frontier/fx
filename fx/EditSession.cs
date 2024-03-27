@@ -30,9 +30,10 @@ public class EditSession {
 			Width = Dim.Fill(24),
 			Height = 1,
 			ReadOnly = true,
-			CanFocus=false,
+			CanFocus = false,
 		};
 		var save = new Label() {
+			AutoSize = false,
 			X = Pos.Right(addressBar),
 			Y = 0,
 			Width = 4,
@@ -55,6 +56,34 @@ public class EditSession {
 			}
 		});
 
+
+		textView.KeyDownD(new() {
+			[KeyCode.Esc] = e => {
+				if(!textView.ReadOnly) {
+					textView.ReadOnly = true;
+					textView.CanFocus = false;
+				} else {
+					return;
+				}
+				Done:
+				e.Handled = true;
+			}
+		});
+		root.KeyDownD(new() {
+			[KeyCode.CursorUp] = e => {
+				if(!textView.CanFocus) {
+					textView.TopRow -= 1;
+					textView.SetNeedsDisplay();
+				}
+			},
+			[KeyCode.CursorDown] = e => {
+				if(!textView.CanFocus) {
+					textView.TopRow += 1;
+					textView.SetNeedsDisplay();
+				}
+			}
+		});
+
 		var main = new Main();
 		main.TermEnter += e => {
 			if(main.folder.currentBody == root) {
@@ -65,6 +94,6 @@ public class EditSession {
 			}
 		};
 		textView.CursorPosition = new(col, row);
-		SView.InitTree([root, addressBar, textView]);
+		SView.InitTree([root, addressBar, save, textView]);
 	}
 }

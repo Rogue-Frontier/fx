@@ -4,6 +4,8 @@ using static SView;
 using fx;
 
 namespace fx;
+
+//TO DO: Move tabs to side
 public record Folder {
 	public View root, head, body;
 

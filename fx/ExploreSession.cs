@@ -204,22 +204,22 @@ public class ExploreSession {
 				);
 		}
 		void InitEvents () {
-			goPrev.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+			goPrev.MouseEvD(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new([.. cwdPrev.Select((string p, int i) => new MenuItem(p, "", () => GoPrev(i + 1)))])
 				}.Show(),
-				[MouseFlags.Button1Pressed] = e => e.Handled=(GoPrev())
+				[MouseFlags.Button1Pressed] = e => e.Handled = (GoPrev())
 			});
-			goNext.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+			goNext.MouseEvD(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new(
 						[.. cwdNext.Select((string p, int i) => new MenuItem(p, "", () => GoNext(i + 1)))]),
 				}.Show(),
-				[MouseFlags.Button1Pressed] = e => e.Handled =(GoNext())
+				[MouseFlags.Button1Pressed] = e => e.Handled = (GoNext())
 			});
-			goLeft.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+			goLeft.MouseEvD(new() {
 				[MouseFlags.Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new([.. Up().Select(p => new MenuItem(p, "", () => GoPath(p)))])
@@ -227,7 +227,7 @@ public class ExploreSession {
 				[MouseFlags.Button1Pressed] = e => e.Handled = (GoLeft())
 			});
 
-			pathList.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+			pathList.MouseEvD(new() {
 				[MouseFlags.Button1Pressed] = e => {
 					var i = pathList.TopItem + e.MouseEvent.Y;
 					if(i >= cwdData.Count)
@@ -264,10 +264,6 @@ public class ExploreSession {
 				return (Action?)(e.KeyCode switch {
 					KeyCode.Enter or KeyCode.CursorRight => () => GoItem(),
 					KeyCode.CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
-					KeyCode.Tab => () => {
-						main.FocusTerm();
-						main.term.Text += $"{{{pathList.SelectedItem}}}";
-					},
 					/*
 					Key.Space => () => {
 						if(!(pathList.SelectedItem < cwdData.Count)) {
@@ -281,44 +277,51 @@ public class ExploreSession {
 					},
 					*/
 					_ => null
-				}) ?? (Action?)(e.AsRune.Value switch {
+				}) ?? e.AsRune.Value switch {
 					'[' => () => GoPrev(),
 					']' => () => GoNext(),
 					'\\' => () => GoLeft(),
 					',' => () => {
 						//Create new tab
 						if(cwdRecall != null) SetCwd(cwdRecall);
-					},
+					}
+					,
 					'.' => () => {
 						var cc = ShowContext(GetPathItem(cwd), 0);
 						cc.MenuBar.KeyDownD(value: new() {
 							{ '.', _ => cc.Hide() }
 						});
-					},
+					}
+					,
 					':' => () => main.FocusTerm(),
 					'\'' => () => {
 						//Copy file
 						return;
-					},
+					}
+					,
 					'"' => () => {
 						if(!GetItem(out var p) || p.dir) return;
 						Preview($"Preview: {p.path}", File.ReadAllText(p.path));
-					},
+					}
+					,
 					'?' => () => {
 						if(!GetItem(out var p)) return;
 						ShowProperties(p);
-					},
+					}
+					,
 					'/' => () => {
 						if(!GetItem(out var p, out var ind)) return;
-						var c = ShowContext(p, ind - pathList.TopItem + 2);
-					},
+						var c = ShowContext(p, ind - pathList.TopItem + 2, 2);
+					}
+					,
 					'~' => () => {
 						if(!GetItem(out var p)) return;
 						if(!fx.locked.Remove(p.path)) {
 							fx.locked.Add(p.path);
 						}
 						RefreshCwd();
-					},
+					}
+					,
 					'!' => () => {
 						//need option to collapse single-directory chains / single-non-empty-directory chains
 						if(!GetItem(out var p))
@@ -327,14 +330,19 @@ public class ExploreSession {
 							ctx.fx.pins.Add(p.path);
 						}
 						freqList.SetNeedsDisplay();
-					},
+					}
+					,
 					'@' => () => {
 						//set dir as workroot
 						fx.workroot = fx.workroot != cwd ? cwd : null;
 						RefreshCwd();
-					},
+					}
+					,
 					'#' => () => {
-					},
+						main.FocusTerm();
+						main.term.Text += $"{{{pathList.SelectedItem}}}";
+					}
+					,
 					>= 'a' and <= 'z' => () => {
 						var c = $"{(char)e.AsRune.Value}";
 						var index = pathList.SelectedItem;
@@ -347,7 +355,8 @@ public class ExploreSession {
 						if(dest.Index == -1) return;
 						pathList.SelectedItem = dest.Index;
 						pathList.SetNeedsDisplay();
-					},
+					}
+					,
 					>= 'A' and <= 'Z' => () => {
 						var index = e.AsRune.Value - 'A' + pathList.TopItem;
 						if(pathList.SelectedItem == index) {
@@ -357,9 +366,10 @@ public class ExploreSession {
 						pathList.SelectedItem = index;
 						pathList.OnSelectedChanged();
 						pathList.SetNeedsDisplay();
-					},
+					}
+					,
 					_ => null
-				});
+				};
 			});
 
 			procList.KeyDownD(new() {
@@ -384,7 +394,7 @@ public class ExploreSession {
 				RefreshChanges();
 				repoList.SelectedItem = e.Item;
 			};
-			repoList.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
+			repoList.MouseEvD(new() {
 				[MouseFlags.Button1Clicked] = e => {
 
 					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
@@ -408,13 +418,21 @@ public class ExploreSession {
 				_ => null
 			});
 			*/
-			ContextMenu ShowContext (PathItem item, int row = 0, int col = 0) {
+			ContextMenu ShowContext (PathItem selected, int row = 0, int col = 0) {
 				var (x, y) = pathList.GetCurrentLoc();
+				var bar = new MenuBarItem("Selected Item", [
+					.. GetSingleActions(main, selected)
+				]);
+				var marked = GetMarkedItems().ToArray();
+				if(marked.Except([selected]).Any()) {
+					bar = new MenuBarItem([
+						bar,
+						new MenuBarItem("Marked Items", children: new MenuItem[0])
+					]);
+				}
 				var c = new ContextMenu() {
 					Position = new(x + col, y+row),
-					MenuItems = new MenuBarItem(null, [
-						.. GetActions(main, item)
-						])
+					MenuItems = bar
 				};
 				c.Show();
 				c.ForceMinimumPosToZero = true;
@@ -533,7 +551,7 @@ public class ExploreSession {
 		var d = new Dialog() {
 			Title= $"Properties: {item.path}",
 		};
-		d.KeyDownD((Dictionary<KeyCode, Action<Key>>)new() {
+		d.KeyDownD(new() {
 			[KeyCode.Enter] = _ => d.RequestStop()
 		});
 
@@ -568,7 +586,7 @@ public class ExploreSession {
 	public static IEnumerable<IProp> GetStaticProps (string path) {
 		if(Directory.Exists(path)) {
 			yield return IS_DIRECTORY;
-			if(Repository.IsValid(path)) {
+			if(Directory.Exists($"{path}/.git")) {
 				yield return IS_REPOSITORY;
 			}
 		} else {
@@ -614,14 +632,12 @@ public class ExploreSession {
 
 		if(main.ctx.fx.libraryData is { Count: > 0 } list) {
 			yield return new MenuBarItem("Libraries", [..list.Select(l => {
-				MenuItem mi = null;
-
 				var link = l.links.FirstOrDefault(link => link.path == item.path);
-				return mi = new MenuItem(l.name, null, () => {
+				return new MenuItem(l.name, null, () => {
 					if(link != null){
 						l.links.Remove(link);
 					} else {
-						l.links.Add(new LibraryLink(item.path, true, true));
+						l.links.Add(new LibraryItem(item.path, true));
 					}
 				}){ CheckType = MenuItemCheckStyle.Checked, Checked = link != null };
 			})]);
@@ -645,44 +661,61 @@ public class ExploreSession {
 			find.FindDirs();
 		});
 		if(item.HasProp(IS_DIRECTORY)) {
-			yield return new MenuItem("Open in Explorer", "", () => RunCmd($"explorer.exe {item.path}"));
+			yield return new MenuItem("Open in System", "", () => RunCmd($"explorer.exe {item.path}"));
 		} else {
 			yield return new("Edit", null, () =>
 				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true)
 			);
 		}
-		yield return new MenuItem("Show in Explorer", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""));
+		yield return new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""));
+
+		yield return new("Delete", null, () => RequestConfirm($"Delete {item.path}"));
+
 		yield return new("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
 
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
+	/// <summary>
+	/// This should be refactored so that ctx handles path updates
+	/// </summary>
 	public IEnumerable<MenuItem> GetSpecifcActions(Main main, PathItem item) {
 		if(item.HasProp(IS_DIRECTORY)) {
-			yield return new MenuItem("Remember", "", () => cwdRecall = item.path);
-			var createFile = () => {
-				RequestName("New File", name => {
-					var f = Path.Combine(item.path, name);
+			yield return new MenuItem("Remember", null, () => cwdRecall = item.path);
+			yield return new MenuItem("New File", null, () => RequestName("New File", name => {
+				if(Path.Combine(item.path, name) is { } f && !Path.Exists(f)) {
 					File.Create(f);
-					if(item.path == cwd) {
+					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
 						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
 					}
 					return true;
-				});
-			};
-			yield return new MenuItem("New File", "", createFile, canExecute: () => !item.HasProp(IS_LOCKED));
-			var createDir = () =>
-				RequestName("New Directory", name => {
-					var f = Path.Combine(item.path, name);
+				}
+				return false;
+			}), canExecute: () => !item.HasProp(IS_LOCKED));
+			yield return new MenuItem("New Dir", null, () => RequestName("New Directory", name => {
+				if(Path.Combine(item.path, name) is { }f && !Path.Exists(f)) {
 					Directory.CreateDirectory(f);
-
-					if(item.path == cwd) {
+					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
 						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
 					}
 					return true;
-				});
-			yield return new MenuItem("New Dir", "", createDir, canExecute: () => !item.HasProp(IS_LOCKED));
+				}
+				return false;
+			}), canExecute: () => !item.HasProp(IS_LOCKED));
+
+			//Midnight Commander multi-move
+			yield return new MenuItem("Move", null, () => RequestName($"Move {item.path}", name => {
+				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
+					File.Move(item.path, f);
+					if(item.path.StartsWith(cwd)) {
+						RefreshCwd();
+						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					}
+					return true;
+				}
+				return false;
+			}));
 		} else {
 			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
 				string local = GetRepoLocal(root, item.path);
@@ -710,7 +743,7 @@ public class ExploreSession {
 			}
 		}
 	}
-	public IEnumerable<MenuItem> GetActions (Main main, PathItem item) =>
+	public IEnumerable<MenuItem> GetSingleActions (Main main, PathItem item) =>
 		
 		
 		[new MenuItem("Cancel", "", () => { }),
@@ -718,7 +751,29 @@ public class ExploreSession {
 		.. ctx.GetCommands(item),
 		.. GetGeneralActions (main, item)];
 
-
+	public static bool RequestConfirm (string title) {
+		var create = new Button() {
+			Title = "Confirm",
+		};
+		var cancel = new Button() {
+			Title = "Cancel",
+		};
+		var d = new Dialog() {
+			Title = title,
+			Buttons = [create, cancel],
+			Width = 32,
+			Height = 3,
+		};
+		bool result = false;
+		void Enter () {
+			result = true;
+			d.RequestStop();
+		}
+		create.MouseClick += (a, e) => Enter();
+		cancel.MouseClick += (a, e) => d.RequestStop();
+		Application.Run(d);
+		return result;
+	}
 	public static void RequestName (string title, Predicate<string> accept) {
 		var create = new Button() {
 			Title = "Create",
@@ -741,8 +796,8 @@ public class ExploreSession {
 		input.TextChanging += (_,e) => {
 			create.Enabled = e.NewValue.Any();
 		};
-		input.KeyDownD((Dictionary<KeyCode, Action<Key>>)new() {
-			[KeyCode.Enter] = _=>Enter()
+		input.KeyDownD(new() {
+			[KeyCode.Enter] = _ => Enter()
 		});
 		void Enter () {
 			if(accept(input.Text.ToString())) {
@@ -761,6 +816,7 @@ public class ExploreSession {
 	/// </summary>
 	/// <param name="path"></param>
 	private void RefreshRepo (string path) {
+		//TODO: Setup File System Watcher
 		var item = GetPathItem(path);
 		if(git is { root: { } root }) {
 			var stillInRepo = path.StartsWith(root);
@@ -777,14 +833,14 @@ public class ExploreSession {
 				git?.Clear();
 				git = default;
 			}
-		} else if(Repository.IsValid(path)) {
+		} else if(Directory.Exists($"{path}/.git")) {
 			//Mark this directory as a known repository.
 
 			ctx.pathData[path] = new(item.local, item.path, new([.. item.propSet, IS_REPOSITORY]));
 			SetRepo(path);
 			RefreshChanges();
 		} else if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoFile, out var prop)) {
-			if(Repository.IsValid(repoFile.root)) {
+			if(Directory.Exists($"{repoFile.root}/.git")) {
 				//We already know that this directory is within some repository from a previous visit.
 				SetRepo(repoFile.root);
 				RefreshChanges();
@@ -908,12 +964,12 @@ public class ExploreSession {
 		p = cwdData[index = pathList.SelectedItem];
 		return true;
 	}
-	public void Preview (string title, string content) {
+	public static void Preview (string title, string content) {
 		var d = new Dialog() {
 			Title = title
 		};
-		d.KeyDownD((Dictionary<KeyCode, Action<Key>>)new() {
-			[KeyCode.Enter] = _=> d.RequestStop()
+		d.KeyDownD(new() {
+			[KeyCode.Enter] = _ => d.RequestStop()
 		});
 		d.Add(new TextView() {
 			X = 0,

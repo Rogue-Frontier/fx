@@ -30,6 +30,9 @@ using Folder = fx.Folder;
 using System.Collections.Concurrent;
 using System.Drawing;
 using Attribute = Terminal.Gui.Attribute;
+
+var a = OpenWindowGetter.GetOpenWindows();
+var b = 0;
 try {
 	Application.Init();
 	var main = new Main();
@@ -62,6 +65,7 @@ public class Main {
 			Width = Dim.Fill(),
 			Height = 1,
 			DesiredCursorVisibility = CursorVisibility.Box,
+			TabStop = false
 		};
 		term.Leave += (a, e) => {
 			term.SetLock();
@@ -94,9 +98,8 @@ public class Main {
 			[KeyCode.CursorDown] = e => e.Handled = true,
 		});
 		var termBar = new Lazy<View>(() => {
-			var view = new FrameView() {
-
-				Title = "Term",
+			var view = new View() {
+				Title = "Command",
 				X = 0,
 				Y = Pos.AnchorEnd(3),
 				Width = Dim.Fill(),
@@ -118,6 +121,8 @@ public class Main {
 			Height = Dim.Fill(3),
 		});
 		exploreSession = new ExploreSession(this, Environment.CurrentDirectory);
+
+
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
 		var termView = new Lazy<View>(() => {
@@ -136,10 +141,11 @@ public class Main {
 		}).Value;
 		foreach(var(name, view) in new Dictionary<string, View>() {
 			["Home"] = homeSession.root,
-			["Expl"] = exploreSession.root
+			["Expl"] = exploreSession.root,
 		}) {
 			folder.AddTab(name, view);
 		}
+		folder.SwitchTab();
 		var window = new Window() {
 			X = 0,
 			Y = 0,
