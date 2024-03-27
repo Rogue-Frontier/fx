@@ -3,6 +3,8 @@ using View = Terminal.Gui.View;
 using static SView;
 using fx;
 
+using static Terminal.Gui.MouseFlags;
+using static Terminal.Gui.KeyCode;
 namespace fx;
 
 //TO DO: Move tabs to side
@@ -153,8 +155,8 @@ public record Tab {
 				Height = 1,
 				Width = name.Length + 3,
 			};
-			root.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
-				[MouseFlags.Button1Pressed] = _ => folder.FocusTab(this)
+			root.MouseEvD(new() {
+				[(int)Button1Pressed] = _ => folder.FocusTab(this)
 			});
 
 			var kill = new Label() {
@@ -162,8 +164,8 @@ public record Tab {
 				X = Pos.AnchorEnd(3),
 				Y = 0,
 			};
-			kill.MouseEvD((Dictionary<MouseFlags, Action<MouseEventEventArgs>>)new() {
-				[MouseFlags.Button1Pressed] = _ => folder.RemoveTab(view)
+			kill.MouseEvD(new() {
+				[(int)Button1Pressed] = _ => folder.RemoveTab(view)
 			});
 			InitTree([[root, kill]]);
 			return root;

@@ -31,6 +31,8 @@ using System.Collections.Concurrent;
 using System.Drawing;
 using Attribute = Terminal.Gui.Attribute;
 
+using static Terminal.Gui.MouseFlags;
+using static Terminal.Gui.KeyCode;
 var a = fx.Monitor.GetOpenWindows();
 var b = 0;
 try {
@@ -86,16 +88,16 @@ public class Main {
 			}
 		};
 		term.MouseClick += (a, e) => {
-			if(e.MouseEvent.Flags == MouseFlags.Button1Clicked) {
+			if(e.MouseEvent.Flags == Button1Clicked) {
 				if(!term.HasFocus) {
 					FocusTerm();
 					e.Handled = true;
 				}
 			}
 		};
-		term.KeyDownD(key: new() {
-			[KeyCode.CursorUp] = e => e.Handled = true,
-			[KeyCode.CursorDown] = e => e.Handled = true,
+		term.KeyDownD(new() {
+			[(int)CursorUp] = e => e.Handled = true,
+			[(int)CursorDown] = e => e.Handled = true,
 		});
 		var termBar = new Lazy<View>(() => {
 			var view = new View() {
@@ -154,9 +156,8 @@ public class Main {
 			BorderStyle = LineStyle.Single,
 			Title = "fx",
 		};
-		window.KeyDownD(key:new() {
-			[KeyCode.Delete] = _ => folder.RemoveTab(),
-		},  value: new() {
+		window.KeyDownD(new() {
+			[(int)Delete] = _ => folder.RemoveTab(),
 			['<'] = _ => folder.SwitchTab(-1),
 			['>'] = _ => folder.SwitchTab(1),
 			[':'] = _ => {
@@ -296,15 +297,15 @@ public static class SView {
 		}
 		return new(x, y);
 	}
-	public static void KeyDownD (this View v, Dictionary<KeyCode, Action<Key>> key = null, Dictionary<int, Action<Key>> value = null) =>
+	public static void KeyDownD (this View v, Dictionary<int, Action<Key>> value) =>
 		v.KeyDown += (_, e) => {
-			var action = key?.GetValueOrDefault(e.KeyCode) ?? value?.GetValueOrDefault(e.AsRune.Value);
+			var action = value?.GetValueOrDefault((int)e.KeyCode);
 			e.Handled = action != null;
 			action ?.Invoke (e);
 		};
-	public static void MouseEvD (this View v, Dictionary<MouseFlags, Action<MouseEventEventArgs>> dict) =>
+	public static void MouseEvD (this View v, Dictionary<int, Action<MouseEventEventArgs>> dict) =>
 		v.MouseEvent += (_, e) => {
-			var action = dict.GetValueOrDefault(e.MouseEvent.Flags);
+			var action = dict.GetValueOrDefault((int)e.MouseEvent.Flags);
 			e.Handled = action != null;
 			action?.Invoke(e);
 		};

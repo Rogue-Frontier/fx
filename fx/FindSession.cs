@@ -9,6 +9,8 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Terminal.Gui;
 
+using static Terminal.Gui.MouseFlags;
+using static Terminal.Gui.KeyCode;
 namespace fx;
 public class FindSession {
 	public View root;
@@ -195,40 +197,39 @@ public class FindSession {
 			}
 		};
 		root.KeyDownD(new() {
-			[KeyCode.Delete] = _ => {
+			[(int)Delete] = _ => {
 				int i = 0;
 			},
-			[KeyCode.Esc] = _ => {
+			[(int)Esc] = _ => {
 				main.folder.RemoveTab(root);
 			}
 		});
 		root.KeyDownD(new() {
-			[KeyCode.Esc] = _=> {
+			[(int)Esc] = _=> {
 				main.folder.RemoveTab(root);
-			}
-		}, new() {
-			['>'] = _=> {
+			},
+			['>'] = _ => {
 				main.folder.SwitchTab();
 			}
 		});
 		rootBar.KeyDownD(new() {
-			[KeyCode.Enter] = _ => FindDirs()
+			[(int)Enter] = _ => FindDirs()
 		});
 		filterBar.KeyDownD(new() {
-			[KeyCode.Enter] = _ => FindFiles()
+			[(int)Enter] = _ => FindFiles()
 		});
 		findBar.KeyDownD(new() {
-			[KeyCode.Enter] = _ => FindLines()
+			[(int)Enter] = _ => FindLines()
 		});
 
 		rootShowButton.MouseEvD(new() {
-			[MouseFlags.Button1Pressed] = _ => FindDirs()
+			[(int)Button1Pressed] = _ => FindDirs()
 		});
 		filterShowButton.MouseEvD(new() {
-			[MouseFlags.Button1Pressed] = _ => FindFiles()
+			[(int)Button1Pressed] = _ => FindFiles()
 		});
 		tree.MouseClickD(new() {
-			[MouseFlags.Button3Clicked] = e => {
+			[Button3Clicked] = e => {
 				var prev = tree.SelectedObject;
 				var row = e.MouseEvent.Y;
 				if(tree.GetObjectOnRow(row) is not { } o)
@@ -247,7 +248,7 @@ public class FindSession {
 			},
 		});
 		tree.KeyDownD(new() {
-			[KeyCode.CursorRight] = _ => {
+			[(int)CursorRight] = _ => {
 				if(!tree.IsExpanded(tree.SelectedObject)) {
 					if(!tree.CanExpand(tree.SelectedObject)) {
 						return;
@@ -260,9 +261,8 @@ public class FindSession {
 					tree.SelectedObject = c;
 				}
 				tree.SetNeedsDisplay();
-			}
-		}, new() {
-			['/'] = _=> {
+			},
+			['/'] = _ => {
 				//TODO SHOW CONTEXT
 			}
 		});
@@ -281,7 +281,7 @@ public class FindSession {
 			SetFilter(filter);
 		}
 		findAllButton.MouseEvD(new() {
-			[MouseFlags.Button1Pressed] = _ => FindLines()
+			[(int)Button1Pressed] = _ => FindLines()
 		});
 		SView.InitTree([root,
 			rootLabel, rootBar, rootShowButton,

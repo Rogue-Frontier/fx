@@ -4,6 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Terminal.Gui;
+
+using static Terminal.Gui.MouseFlags;
+using static Terminal.Gui.KeyCode;
 namespace fx;
 public class EditSession {
 	public View root;
@@ -51,14 +54,14 @@ public class EditSession {
 
 
 		save.MouseClickD(new() {
-			[MouseFlags.Button1Clicked] = _ => {
+			[Button1Clicked] = _ => {
 				File.WriteAllText(path, textView.Text);
 			}
 		});
 
 
 		textView.KeyDownD(new() {
-			[KeyCode.Esc] = e => {
+			[(int)Esc] = e => {
 				if(!textView.ReadOnly) {
 					textView.ReadOnly = true;
 					textView.CanFocus = false;
@@ -70,13 +73,13 @@ public class EditSession {
 			}
 		});
 		root.KeyDownD(new() {
-			[KeyCode.CursorUp] = e => {
+			[(int)CursorUp] = e => {
 				if(!textView.CanFocus) {
 					textView.TopRow -= 1;
 					textView.SetNeedsDisplay();
 				}
 			},
-			[KeyCode.CursorDown] = e => {
+			[(int)CursorDown] = e => {
 				if(!textView.CanFocus) {
 					textView.TopRow += 1;
 					textView.SetNeedsDisplay();

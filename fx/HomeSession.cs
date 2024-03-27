@@ -8,7 +8,8 @@ using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Threading.Tasks;
 using Terminal.Gui;
-
+using static Terminal.Gui.MouseFlags;
+using static Terminal.Gui.KeyCode;
 namespace fx;
 public class HomeSession {
 	public View root;
@@ -84,12 +85,11 @@ public class HomeSession {
 			['/'] = _ => {
 				var rowObj = libraryTree.SelectedObject;
 				var (row, col) = libraryTree.GetObjectPos(rowObj) ?? (0, 0);
-
 				SView.ShowContext(libraryTree, [.. GetSpecificActions(row, rowObj)], row + 2, col + 2);
 			}
 		});
 		libraryTree.MouseEvD(new() {
-			[MouseFlags.Button3Pressed] = e => {
+			[(int)Button3Pressed] = e => {
 				var prevObj = libraryTree.SelectedObject;
 				var y = e.MouseEvent.Y;
 				var row = y + libraryTree.ScrollOffsetVertical;

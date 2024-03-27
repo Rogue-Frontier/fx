@@ -23,6 +23,10 @@ using Application = Terminal.Gui.Application;
 using System.Runtime.InteropServices;
 using System.Xml.Linq;
 using System.IO;
+
+
+using static Terminal.Gui.MouseFlags;
+using static Terminal.Gui.KeyCode;
 namespace fx;
 public class ExploreSession {
 	public View root;
@@ -207,30 +211,30 @@ public class ExploreSession {
 		}
 		void InitEvents () {
 			goPrev.MouseEvD(new() {
-				[MouseFlags.Button3Clicked] = e => new ContextMenu() {
+				[(int)Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new([.. cwdPrev.Select((string p, int i) => new MenuItem(p, "", () => GoPrev(i + 1)))])
 				}.Show(),
-				[MouseFlags.Button1Pressed] = e => e.Handled = (GoPrev())
+				[(int)Button1Pressed] = e => e.Handled = (GoPrev())
 			});
 			goNext.MouseEvD(new() {
-				[MouseFlags.Button3Clicked] = e => new ContextMenu() {
+				[(int)Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new(
 						[.. cwdNext.Select((string p, int i) => new MenuItem(p, "", () => GoNext(i + 1)))]),
 				}.Show(),
-				[MouseFlags.Button1Pressed] = e => e.Handled = (GoNext())
+				[(int)Button1Pressed] = e => e.Handled = (GoNext())
 			});
 			goLeft.MouseEvD(new() {
-				[MouseFlags.Button3Clicked] = e => new ContextMenu() {
+				[(int)Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new([.. Up().Select(p => new MenuItem(p, "", () => GoPath(p)))])
 				}.Show(),
-				[MouseFlags.Button1Pressed] = e => e.Handled = (GoLeft())
+				[(int)Button1Pressed] = e => e.Handled = (GoLeft())
 			});
 
 			pathList.MouseEvD(new() {
-				[MouseFlags.Button1Pressed] = e => {
+				[(int)Button1Pressed] = e => {
 					var i = pathList.TopItem + e.MouseEvent.Y;
 					if(i >= cwdData.Count)
 						return;
@@ -238,7 +242,7 @@ public class ExploreSession {
 					pathList.SetNeedsDisplay();
 					e.Handled = true;
 				},
-				[MouseFlags.Button3Pressed] = e => {
+				[(int)Button3Pressed] = e => {
 					var prev = pathList.SelectedItem;
 
 					var i = pathList.TopItem + e.MouseEvent.Y;
@@ -264,8 +268,8 @@ public class ExploreSession {
 			pathList.KeyDownF(e => {
 				if(!pathList.HasFocus) return null;
 				return (Action?)(e.KeyCode switch {
-					KeyCode.Enter or KeyCode.CursorRight => () => GoItem(),
-					KeyCode.CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
+					Enter or CursorRight => () => GoItem(),
+					CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
 					/*
 					Key.Space => () => {
 						if(!(pathList.SelectedItem < cwdData.Count)) {
@@ -374,24 +378,22 @@ public class ExploreSession {
 				};
 			});
 			procList.KeyDownD(new() {
-				[KeyCode.CursorLeft] = default,
-				[KeyCode.CursorRight] = default,
-				[KeyCode.Enter] = _ => {
+				[(int)CursorLeft] = default,
+				[(int)CursorRight] = default,
+				[(int)Enter] = _ => {
 					var item = procData[procList.SelectedItem];
 					Monitor.SwitchToThisWindow(item.window, true);
 				},
-				[KeyCode.Backspace] = _ => {
+				[(int)Backspace] = _ => {
 					if(!(procList.SelectedItem < procData.Count))
 						return;
 					var p = procData[procList.SelectedItem];
 					Process.GetProcessById((int)p.pid).Kill();
 					procData.Remove(p);
 					procList.SetNeedsDisplay();
-				}
-			}, new() {
+				},
 				['\''] = _ => UpdateProcesses(),
 				['/'] = _ => {
-
 					var ind = procList.SelectedItem;
 					//procData.RemoveAll(w => Process.GetProcessById((int)w.pid) == null);
 					if(!(ind > -1 && ind < procData.Count)) {
@@ -409,8 +411,8 @@ public class ExploreSession {
 						});
 					}
 
-					SView.ShowContext(procList, [..GetActions()], ind+2, 0);
-				//Context menu
+					SView.ShowContext(procList, [.. GetActions()], ind + 2, 0);
+					//Context menu
 				},
 			});
 			repoList.OpenSelectedItem += (a, e) => {
@@ -421,12 +423,12 @@ public class ExploreSession {
 				repoList.SelectedItem = e.Item;
 			};
 			repoList.MouseEvD(new() {
-				[MouseFlags.Button1Clicked] = e => {
+				[(int)Button1Clicked] = e => {
 
 					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
 					repoList.SetNeedsDisplay();
 				},
-				[MouseFlags.Button3Clicked] = e => {
+				[(int)Button3Clicked] = e => {
 					var prev = repoList.SelectedItem;
 					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
 
@@ -580,7 +582,7 @@ public class ExploreSession {
 			Title= $"Properties: {item.path}",
 		};
 		d.KeyDownD(new() {
-			[KeyCode.Enter] = _ => d.RequestStop()
+			[(int)Enter] = _ => d.RequestStop()
 		});
 
 		d.Add(new TextView() {
@@ -789,7 +791,7 @@ public class ExploreSession {
 		.. GetStaticActions (main, item)];
 
 	public static bool RequestConfirm (string title) {
-		var create = new Button() {
+		var confirm = new Button() {
 			Title = "Confirm",
 		};
 		var cancel = new Button() {
@@ -797,23 +799,23 @@ public class ExploreSession {
 		};
 		var d = new Dialog() {
 			Title = title,
-			Buttons = [create, cancel],
+			Buttons = [confirm, cancel],
 			Width = 32,
 			Height = 3,
 		};
 		bool result = false;
-		void Enter () {
+		void Confirm () {
 			result = true;
 			d.RequestStop();
 		}
-		create.MouseClick += (a, e) => Enter();
+		confirm.MouseClick += (a, e) => Confirm();
 		cancel.MouseClick += (a, e) => d.RequestStop();
 		Application.Run(d);
 		return result;
 	}
 	public static void RequestName (string title, Predicate<string> accept) {
-		var create = new Button() {
-			Title = "Create",
+		var confirm = new Button() {
+			Title = "Confirm",
 			Enabled = false
 		};
 		var cancel = new Button() {
@@ -821,7 +823,7 @@ public class ExploreSession {
 		};
 		var d = new Dialog() {
 			Title = title,
-			Buttons = [create, cancel],
+			Buttons = [confirm, cancel],
 			Width = 32, Height = 5,
 		};
 		var input = new TextField() {
@@ -831,17 +833,17 @@ public class ExploreSession {
 			Height = 1,
 		};
 		input.TextChanging += (_,e) => {
-			create.Enabled = e.NewValue.Any();
+			confirm.Enabled = e.NewValue.Any();
 		};
 		input.KeyDownD(new() {
-			[KeyCode.Enter] = _ => Enter()
+			[(int)Enter] = _ => Confirm()
 		});
-		void Enter () {
+		void Confirm () {
 			if(accept(input.Text.ToString())) {
 				d.RequestStop();
 			}
 		}
-		create.MouseClick += (a,e) => Enter();
+		confirm.MouseClick += (a,e) => Confirm();
 		cancel.MouseClick+= (a,e)=>d.RequestStop();
 		d.Add(input);
 		input.SetFocus();
@@ -1006,7 +1008,7 @@ public class ExploreSession {
 			Title = title
 		};
 		d.KeyDownD(new() {
-			[KeyCode.Enter] = _ => d.RequestStop()
+			[(int)Enter] = _ => d.RequestStop()
 		});
 		d.Add(new TextView() {
 			X = 0,
