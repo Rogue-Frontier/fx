@@ -49,6 +49,8 @@ try {
 public class Main {
 	public Ctx ctx;
 	public View[] root;
+
+	public View termPrev;
 	public TextField term;
 	public Folder folder;
 	public bool readProc = false;
@@ -72,21 +74,6 @@ public class Main {
 		term.Leave += (a, e) => {
 			term.SetLock();
 		};
-		term.KeyDown += (a, e) => {
-			if(e == Key.Esc) {
-				term.SetLock();
-				e.Handled = true;
-			} else if(e == Key.Enter) {
-				var ev = new TermEvent(term);
-				foreach(var listen in TermEnter.GetInvocationList()) {
-					listen.DynamicInvoke(ev);
-					if(ev.Handled) {
-						e.Handled = true;
-						return;
-					}
-				}
-			}
-		};
 		term.MouseClick += (a, e) => {
 			if(e.MouseEvent.Flags == Button1Clicked) {
 				if(!term.HasFocus) {
@@ -96,8 +83,36 @@ public class Main {
 			}
 		};
 		term.KeyDownD(new() {
+			[(int)Esc] = e => {
+				term.SetLock();
+				e.Handled = true;
+			},
+			[(int)Enter] = e => {
+				var ev = new TermEvent(term);
+				foreach(var listen in TermEnter.GetInvocationList()) {
+					listen.DynamicInvoke(ev);
+					if(ev.Handled) {
+						e.Handled = true;
+						return;
+					}
+				}
+			},
 			[(int)CursorUp] = e => e.Handled = true,
 			[(int)CursorDown] = e => e.Handled = true,
+			[(int)Backspace] = e => {
+				if(term.Text.Any()) {
+					e.Handled = false;
+					return;
+				}
+				term.SetLock(true);
+				term.SuperView.SetFocus();
+
+				if(termPrev.IsAdded) {
+					termPrev.SetFocus();
+				}
+
+				e.Handled = true;
+			}
 		});
 		var termBar = new Lazy<View>(() => {
 			var view = new View() {
@@ -107,7 +122,7 @@ public class Main {
 				Width = Dim.Fill(),
 				Height = 3,
 				CanFocus = false,
-				BorderStyle = LineStyle.Single
+				BorderStyle = LineStyle.Single,
 			};
 			InitTree([view, term]);
 			return view;
@@ -160,10 +175,7 @@ public class Main {
 			[(int)Delete] = _ => folder.RemoveTab(),
 			['<'] = _ => folder.SwitchTab(-1),
 			['>'] = _ => folder.SwitchTab(1),
-			[':'] = _ => {
-				term.SetLock(false);
-				term.SetFocus();
-			}
+			[':'] = _ => FocusTerm(window.Focused),
 		});
 		InitTree([
 			[window, folder.root, termBar]
@@ -180,11 +192,12 @@ public class Main {
 		};
 		root = [window, windowMenuBar];
 	}
-	public void FocusTerm () {
+	public void FocusTerm (View termPrev = null) {
 		if(term.ReadOnly) {
 			term.SetLock(false);
 		}
 		term.SetFocus();
+		this.termPrev = termPrev;
 	}
 }
 //public record Session(Fx state, Ctx temp);
@@ -231,10 +244,12 @@ public record Ctx {
 	public void Save () =>
 		File.WriteAllText(Fx.SAVE_PATH, se.Serialize(fx).Replace(USER_PROFILE, USER_PROFILE_MASK));
 	public void ResetCommands () {
-		var d = Directory.CreateDirectory($"Executables");
-		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{d.FullName}.yaml"));
+
+		var dir = Command.EXECUTABLES_DIR;
+		Directory.CreateDirectory(dir);
+		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{dir}.yaml"));
 		foreach((var name, var path) in executables) {
-			File.WriteAllText($"{d.FullName}/{name}", path);
+			File.WriteAllText($"{dir}/{name}", path);
 		}
 		Commands = de.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
 	}

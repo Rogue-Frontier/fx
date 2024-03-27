@@ -21,13 +21,16 @@ public record Folder {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
-			Height = 1
+			Height = 1,
+
+			//BorderStyle = LineStyle.Single
 		};
 		body = new View() {
 			X = 0,
 			Y = 1,
 			Width = Dim.Fill(),
-			Height = Dim.Fill()
+			Height = Dim.Fill(),
+			BorderStyle = LineStyle.Single
 		};
 		foreach(var (name, view) in tabs) {
 			var tab = new Tab(name, view);
@@ -100,6 +103,7 @@ public record Folder {
 
 	public void FocusTab(Tab tab) {
 		SelectTab(tab);
+		body.Title = tab.name;
 		SetBody(tab.view);
 	}
 	private void SelectTab(Tab tab) {

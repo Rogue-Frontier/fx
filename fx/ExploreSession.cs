@@ -267,9 +267,9 @@ public class ExploreSession {
 			pathList.OpenSelectedItem += (a, e) => GoItem();
 			pathList.KeyDownF(e => {
 				if(!pathList.HasFocus) return null;
-				return (Action?)(e.KeyCode switch {
-					Enter or CursorRight => () => GoItem(),
-					CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
+				return (Action?)((int)e.KeyCode switch {
+					(int)Enter or (int)CursorRight => () => GoItem(),
+					(int)CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
 					/*
 					Key.Space => () => {
 						if(!(pathList.SelectedItem < cwdData.Count)) {
@@ -282,16 +282,22 @@ public class ExploreSession {
 						term.PositionCursor();
 					},
 					*/
-					_ => null
-				}) ?? e.AsRune.Value switch {
+
+					'F' | (int)CtrlMask => () => {
+						var find = new FindSession(main, cwd);
+						main.folder.AddTab($"Find {cwd}", find.root, true);
+						find.rootBar.SetLock(true);
+						find.FindDirs();
+					}
+					,
+
 					'[' => () => GoPrev(),
 					']' => () => GoNext(),
 					'\\' => () => GoLeft(),
 					',' => () => {
 						//Create new tab
 						if(cwdRecall != null) SetCwd(cwdRecall);
-					}
-					,
+					},
 					'.' => () => {
 						var cc = ShowContext(GetPathItem(cwd), 0);
 						cc.MenuBar.KeyDownD(value: new() {
@@ -299,7 +305,7 @@ public class ExploreSession {
 						});
 					}
 					,
-					':' => () => main.FocusTerm(),
+					':' => () => main.FocusTerm(pathList),
 					'\'' => () => {
 						//Copy file
 						return;
@@ -345,7 +351,7 @@ public class ExploreSession {
 					}
 					,
 					'#' => () => {
-						main.FocusTerm();
+						main.FocusTerm(pathList);
 						main.term.Text += $"{{{pathList.SelectedItem}}}";
 					}
 					,
@@ -372,10 +378,9 @@ public class ExploreSession {
 						pathList.SelectedItem = index;
 						pathList.OnSelectedChanged();
 						pathList.SetNeedsDisplay();
-					}
-					,
+					},
 					_ => null
-				};
+				});
 			});
 			procList.KeyDownD(new() {
 				[(int)CursorLeft] = default,
@@ -674,8 +679,8 @@ public class ExploreSession {
 			find.rootBar.SetLock(true);
 			find.FindDirs();
 		});
-		if(main.ctx.fx.libraryData is { Count: > 0 } list) {
-			yield return new MenuBarItem("Libraries", [..list.Select(l => {
+		yield return new MenuBarItem("Library", [
+			..main.ctx.fx.libraryData.Select(l => {
 				var link = l.links.FirstOrDefault(link => link.path == item.path);
 				return new MenuItem(l.name, null, () => {
 					if(link != null){
@@ -684,8 +689,19 @@ public class ExploreSession {
 						l.links.Add(new LibraryItem(item.path, true));
 					}
 				}){ CheckType = MenuItemCheckStyle.Checked, Checked = link != null };
-			})]);
-		}
+			}),
+			new MenuItem("New Library", null, () => {
+				RequestName("New Library", name => {
+					if(main.ctx.fx.libraryData.Any(l => l.name == name)){
+						return false;
+					}
+					var l = new Library(name);
+					l.links.Add(new LibraryItem(item.path, true));
+					main.ctx.fx.libraryData.Add(l);
+					return true;
+				});
+			})
+		]);
 		var pins = main.ctx.fx.pins;
 		var pin = pins.Contains(item.path);
 		yield return new MenuItem(pin ? "Unpin" : "Pin", null, () =>
@@ -783,9 +799,9 @@ public class ExploreSession {
 		}
 	}
 	public IEnumerable<MenuItem> GetSingleActions (Main main, PathItem item) =>
-		
-		
-		[new MenuItem("Cancel", "", () => { }),
+		[new MenuItem("Cancel", "", () => {
+		return;
+		}),
 		.. GetInstanceActions(main, item),
 		.. ctx.GetCommands(item),
 		.. GetStaticActions (main, item)];
@@ -824,17 +840,15 @@ public class ExploreSession {
 		var d = new Dialog() {
 			Title = title,
 			Buttons = [confirm, cancel],
-			Width = 32, Height = 5,
+			Width = 48, Height = 6,
 		};
 		var input = new TextField() {
-			X = 0,
-			Y = 0,
+			X = 1,
+			Y = 1,
 			Width = Dim.Fill(2),
 			Height = 1,
 		};
-		input.TextChanging += (_,e) => {
-			confirm.Enabled = e.NewValue.Any();
-		};
+		input.TextChanging += (_,e) => confirm.Enabled = e.NewValue.Any();
 		input.KeyDownD(new() {
 			[(int)Enter] = _ => Confirm()
 		});

@@ -14,9 +14,10 @@ public record Command () {
 	public string name;
 	public string exe;
 	public TargetAny targetAny;
-	public string fmt { set => exe = @$"""{value}"""; }
-	public string program { set => exe = @$"""{File.ReadAllText($"Programs/{value}")}"" {{0}}"; }
 
+	public static string EXECUTABLES_DIR = "Executables";
+	public string fmt { set => exe = @$"""{value}"""; }
+	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_DIR}/{value}")}"" {{0}}"; }
 	public bool Accept (string path) => targetAny.Accept(path);
 	public string GetCmd (string target) => string.Format(exe, target);
 }

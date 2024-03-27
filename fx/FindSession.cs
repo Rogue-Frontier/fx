@@ -153,7 +153,7 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height=1,
-			Text = "[Replace]",
+			Text = "[Here]",
 			NoDecorations = true,
 			NoPadding = true
 		};
@@ -188,7 +188,7 @@ public class FindSession {
 			AspectGetter = f => f switch {
 				FindDir d => $"{d.name}/",
 				FindFile ff => ff.name,
-				FindLine l => $"{l.row,3}|{l.line}"
+				FindLine l => $"|{l.row,4}|{l.line.Replace("\r",null).Replace("\t", "    ")}"
 			}
 		};
 		tree.ObjectActivated += (a, e) => {
@@ -263,7 +263,8 @@ public class FindSession {
 				tree.SetNeedsDisplay();
 			},
 			['/'] = _ => {
-				//TODO SHOW CONTEXT
+				var (row, col) = tree.GetObjectPos(tree.SelectedObject) ?? (0, 0);
+				var c = ShowContext(tree.SelectedObject, row+1, col+1);
 			}
 		});
 		void FindFiles () {
@@ -302,13 +303,19 @@ public class FindSession {
 		c.ForceMinimumPosToZero = true;
 		return c;
 	}
-	IEnumerable<MenuItem> GetActions (IFind item) => [..(item switch {
+	IEnumerable<MenuItem> GetActions (IFind item) => [
+		new MenuItem("Cancel", null, () => { }),
+
+		..(item switch {
 			FindDir d => GetActions(d),
 			FindFile f => GetActions(f),
 			FindLine l => GetActions(l),
 			_ => throw new Exception()
 		}),
-		..ExploreSession.GetStaticActions(main, ctx.GetCachedPathItem(item.path, ExploreSession.GetStaticProps))
+		
+		.. item is not FindLine ?
+			ExploreSession.GetStaticActions(main, ctx.GetCachedPathItem(item.path, ExploreSession.GetStaticProps)) :
+			[]
 	];
 	IEnumerable<MenuItem> GetActions (FindDir d) {
 		yield return new MenuItem("Explore Dir", "", () => {
@@ -325,6 +332,9 @@ public class FindSession {
 		yield return new MenuItem("Edit Line", "", () => {
 			main.folder.AddTab($"Edit {l.path}", new EditSession(l.path, l.row, l.col).root, true);
 		});
+		yield return new MenuItem("Copy Group", "", () => { });
+		yield return new MenuItem("Copy Line", "", () => {});
+
 		yield break;
 	}
 	public void FindDirs () {
@@ -358,6 +368,11 @@ public class FindSession {
 	string GetRoot () =>
 		rootBar.Text.ToString().Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE);
 }
+
+
+public enum LeafType {
+	Dir, File, Line
+}
 /// <summary>
 /// 
 /// </summary>
@@ -369,7 +384,15 @@ public record FindFilter (Regex filePattern, Regex linePattern, string replace) 
 	public bool Accept (FindFile f) => filePattern?.Match(f.name).Success ?? false;
 	public bool Accept (string line) => linePattern?.Match(line).Success ?? false;
 	public void Replace (string line) => linePattern.Replace(line, replace);
+	public LeafType LeafType =>
+		linePattern == null && filePattern == null ?
+			LeafType.Dir :
+		linePattern == null ?
+			LeafType.File :
+		LeafType.Line;
 }
+
+
 public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 
 
@@ -420,12 +443,12 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 		return b;
 	}
 	private IEnumerable<IFind> GetChildren (FindFile f) => ChildrenDict.GetOrAdd(f, _ => {
-		if(filter.linePattern is not { } lp) {
+		if(filter.LeafType != LeafType.Line) {
 			return [];
 		}
 		try {
 			return File.ReadLines(f.path)
-				.Select((line, row) => (row, line, match: lp.Match(line)))
+				.Select((line, row) => (row, line, match: filter.linePattern.Match(line)))
 				.Where(p => p.match.Success)
 				.Select(p => new FindLine(f.path, p.row, p.match.Index, p.line, p.match.Value)).Cast<IFind>().ToList();
 		} catch(IOException e) {
@@ -436,10 +459,7 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 		return [];
 	});
 	private IEnumerable<IFind> GetChildren(FindLine l) => ChildrenDict[l] = Enumerable.Empty<IFind>().ToList();
-	
-	
-	
-	private IEnumerable<IFind> GetLeaves (IFind i) => i switch {
+	private IEnumerable<IFind> GetLeavesOrSelf (IFind i) => i switch {
 		FindDir d => GetLeavesOrSelf(d),
 		FindFile f => GetLeavesOrSelf(f),
 		_ => Enumerable.Empty<IFind>()
@@ -449,29 +469,36 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 		var subDir = Directory.GetDirectories(dir.path);
 		var subDirLeaves = subDir.SelectMany(d => GetLeavesOrSelf(new FindDir(d))).ToList();
 		//Leaf type: Dir
-		if(filter.filePattern is not { }fp) {
-			if(subDir.Any()) {
+		if(filter.LeafType == LeafType.Dir) {
+			if(subDir.Any())
 				return subDirLeaves;
-			}
 			return [dir];
 		}
-		var subFile = Directory.GetFiles(dir.path).Where(f => fp.Match(f).Success);
+		var subFile = Directory.GetFiles(dir.path).Where(f => filter.filePattern.Match(f).Success);
 		var subFileLeaves = subFile
 			.SelectMany(f => GetLeavesOrSelf(new FindFile(f))).ToList();
 		return [.. subDirLeaves, .. subFileLeaves];
 	}
 	private IEnumerable<IFind> GetLeavesOrSelf(FindFile f) {
-		if(filter.linePattern is not { }lp) {
+		if(!filter.Accept(f)) {
+			return [];
+		}
+		if(filter.LeafType == LeafType.File) {
 			return [f];
 		}
 		try {
 			return File.ReadAllLines(f.path)
-				.Select((line, index) => (line, index, match: lp.Match(line)))
+				.Select((line, index) => (line, index, match: filter.linePattern.Match(line)))
 				.Where(pair => pair.match.Success)
 				.Select(pair => new FindLine(f.path, pair.index, pair.match.Index, pair.line, pair.match.Value));
 		} catch(Exception e) {
 			return [];
 		}
+	}
+	private IEnumerable<IFind> GetLeavesOrSelf(FindLine l) {
+		if(filter.LeafType == LeafType.Line)
+			return [l];
+		return [];
 	}
 }
 public interface IFind {
