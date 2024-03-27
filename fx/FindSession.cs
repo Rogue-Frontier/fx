@@ -1,4 +1,4 @@
-﻿using LibGit2Sharp;
+using LibGit2Sharp;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -318,20 +318,76 @@ public class FindSession {
 			[]
 	];
 	IEnumerable<MenuItem> GetActions (FindDir d) {
-		yield return new MenuItem("Explore Dir", "", () => {
+		yield return new MenuItem("Explore", "", () => {
 			main.folder.AddTab($"Expl {d.name}", new ExploreSession(main, d.path).root, true);
 		});
 	}
 	IEnumerable<MenuItem> GetActions (FindFile f) {
-		yield return new MenuItem("Edit File", "", () => {
+		/*
+		yield return new MenuItem("Edit", "", () => {
 			main.folder.AddTab($"Edit {f.name}", new EditSession(f.path).root, true);
 		});
+		*/
 		yield break;
 	}
+
+	private void RequestReplace(string title, string original, Action<string> accept) {
+		var confirm = new Button() { Title = "Confirm", };
+		var cancel = new Button() { Title = "Cancel", };
+		var d = new Dialog() {
+			Title = title,
+			Buttons = [confirm, cancel],
+			Width = 96,
+			Height = 6,
+		};
+		var input = new TextView() {
+			X = 1,
+			Y = 1,
+			Width = Dim.Fill(2),
+			Height = 1,
+			Multiline = false,
+			PreserveTrailingSpaces = true,
+			TabWidth = 4,
+			AllowsTab = true,
+
+			Text = original,
+		};
+		input.KeyDownD(new() {
+			[(int)Enter] = _ => Confirm()
+		});
+		void Confirm() {
+			accept(input.Text.ToString());
+			d.RequestStop();
+		}
+		confirm.MouseClick += (a, e) => Confirm();
+		cancel.MouseClick += (a, e) => d.RequestStop();
+		d.Add(input);
+		input.SetFocus();
+		Application.Run(d);
+	}
+
 	IEnumerable<MenuItem> GetActions(FindLine l) {
-		yield return new MenuItem("Edit Line", "", () => {
+		yield return new MenuItem("Replace Line", null, () =>
+			RequestReplace($"Edit {l.path}", l.line, result => {
+				var lines = File.ReadAllLines(l.path);
+				lines[l.row] = result;
+				File.WriteAllLines(l.path, lines);
+			})
+		);
+
+		yield return new MenuItem("Replace Match", null, () =>
+			RequestReplace($"Edit {l.path}", l.capture, result => {
+				var lines = File.ReadAllLines(l.path);
+				ref var line = ref lines[l.row];
+				line = line[..l.col] + result + line[(l.col + l.capture.Length)..];
+				File.WriteAllLines(l.path, lines);
+			})
+		);
+
+		yield return new MenuItem("Edit", "", () => {
 			main.folder.AddTab($"Edit {l.path}", new EditSession(l.path, l.row, l.col).root, true);
 		});
+
 		yield return new MenuItem("Copy Group", "", () => { });
 		yield return new MenuItem("Copy Line", "", () => {});
 

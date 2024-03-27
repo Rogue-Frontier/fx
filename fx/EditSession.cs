@@ -25,19 +25,9 @@ public class EditSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		var addressBar = new TextField() {
-			Title= path,
-
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(24),
-			Height = 1,
-			ReadOnly = true,
-			CanFocus = false,
-		};
 		var save = new Label() {
 			AutoSize = false,
-			X = Pos.Right(addressBar),
+			X = 8,
 			Y = 0,
 			Width = 4,
 			Height = 1,
@@ -45,7 +35,7 @@ public class EditSession {
 		};
 
 		var textView = new TextView() {
-			X = 0,
+			X = 8,
 			Y = 2,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
@@ -70,7 +60,7 @@ public class EditSession {
 				}
 				Done:
 				e.Handled = true;
-			}
+			},
 		});
 		root.KeyDownD(new() {
 			[(int)CursorUp] = e => {
@@ -84,6 +74,10 @@ public class EditSession {
 					textView.TopRow += 1;
 					textView.SetNeedsDisplay();
 				}
+			},
+
+			['S' | (uint)AltMask] = e => {
+				return;
 			}
 		});
 
@@ -97,6 +91,6 @@ public class EditSession {
 			}
 		};
 		textView.CursorPosition = new(col, row);
-		SView.InitTree([root, addressBar, save, textView]);
+		SView.InitTree([root, save, textView]);
 	}
 }

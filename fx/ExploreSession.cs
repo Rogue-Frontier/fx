@@ -1,4 +1,4 @@
-﻿using IWshRuntimeLibrary;
+using IWshRuntimeLibrary;
 using LibGit2Sharp;
 using System;
 using System.Collections.Generic;
@@ -667,13 +667,17 @@ public class ExploreSession {
 		//yield return new MenuItem(item.local, null, null, () => false);
 		//yield return new MenuItem("----", null, null, () => false);
 
-
-		if(item.HasProp(IS_FILE)) {
+		if(item.HasProp(IS_DIRECTORY)) {
+			yield return new MenuItem("Term", null, () => {
+				var session = new TermSession(main, item.path);
+				main.folder.AddTab($"Term {item.path}", session.root, true);
+			});
+		} else if(item.HasProp(IS_FILE)) {
 			yield return new MenuItem("Edit", null, () =>
 				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true)
 			);
 		}
-		yield return new MenuItem("Find...", null, () => {
+		yield return new MenuItem("Find", null, () => {
 			var find = new FindSession(main, item.path);
 			main.folder.AddTab($"Find {item.path}", find.root, true);
 			find.rootBar.SetLock(true);
@@ -720,6 +724,7 @@ public class ExploreSession {
 		yield return new MenuItem("Delete", null, () => RequestConfirm($"Delete {item.path}"));
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
+	//
 	/// <summary>
 	/// This should be refactored so that ctx handles path updates
 	/// </summary>
@@ -748,8 +753,6 @@ public class ExploreSession {
 				}
 				return false;
 			}), canExecute: () => !item.HasProp(IS_LOCKED));
-
-
 			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
 				string local = GetRepoLocal(root, item.path);
 				yield return new MenuItem("Diff", null, () => {
@@ -1009,12 +1012,14 @@ public class ExploreSession {
 		return true;
 	}
 	bool GetItem (out PathItem p, out int index) {
-		if(pathList.SelectedItem >= cwdData.Count) {
+
+		var ind = pathList.SelectedItem;
+		if(!(ind > 0 && ind < cwdData.Count)) {
 			p = null;
 			index = -1;
 			return false;
 		}
-		p = cwdData[index = pathList.SelectedItem];
+		p = cwdData[index = ind];
 		return true;
 	}
 	public static void Preview (string title, string content) {

@@ -107,7 +107,7 @@ public class Main {
 				term.SetLock(true);
 				term.SuperView.SetFocus();
 
-				if(termPrev.IsAdded) {
+				if(termPrev?.IsAdded == true) {
 					termPrev.SetFocus();
 				}
 
@@ -168,8 +168,9 @@ public class Main {
 			Y = 0,
 			Width = Dim.Fill(0),
 			Height = Dim.Fill(0),
-			BorderStyle = LineStyle.Single,
-			Title = "fx",
+
+			BorderStyle = LineStyle.None,
+			//Text = "fx"
 		};
 		window.KeyDownD(new() {
 			[(int)Delete] = _ => folder.RemoveTab(),
@@ -312,9 +313,9 @@ public static class SView {
 		}
 		return new(x, y);
 	}
-	public static void KeyDownD (this View v, Dictionary<int, Action<Key>> value) =>
+	public static void KeyDownD (this View v, Dictionary<uint, Action<Key>> value) =>
 		v.KeyDown += (_, e) => {
-			var action = value?.GetValueOrDefault((int)e.KeyCode);
+			var action = value?.GetValueOrDefault((uint)e.KeyCode);
 			e.Handled = action != null;
 			action ?.Invoke (e);
 		};

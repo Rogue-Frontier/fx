@@ -167,11 +167,6 @@ public class HomeSession {
 					main.folder.AddTab("Expl", new ExploreSession(main, Path.GetDirectoryName(path)).root, true);
 				});
 
-
-				yield return new MenuItem("Open in Terminal", null, () => {
-					main.folder.AddTab($"Term {path}", new TermSession(main, path).root, true);
-				});
-
 				var pathItem = ctx.GetPathItem(path, ExploreSession.GetStaticProps);
 				foreach(var c in ctx.GetCommands(pathItem)) yield return c;
 				foreach(var c in ExploreSession.GetStaticActions(main, pathItem)) yield return c;

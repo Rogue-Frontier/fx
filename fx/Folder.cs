@@ -21,13 +21,14 @@ public record Folder {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
-			Height = 1,
+			Height = 3,
 
-			//BorderStyle = LineStyle.Single
+			Title = "Tabs",
+			BorderStyle = LineStyle.Single
 		};
 		body = new View() {
 			X = 0,
-			Y = 1,
+			Y = 3,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			BorderStyle = LineStyle.Single
