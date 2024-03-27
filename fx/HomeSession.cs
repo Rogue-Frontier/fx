@@ -174,7 +174,7 @@ public class HomeSession {
 
 				var pathItem = ctx.GetPathItem(path, ExploreSession.GetStaticProps);
 				foreach(var c in ctx.GetCommands(pathItem)) yield return c;
-				foreach(var c in ExploreSession.GetGeneralActions(main, pathItem)) yield return c;
+				foreach(var c in ExploreSession.GetStaticActions(main, pathItem)) yield return c;
 			}
 			IEnumerable<MenuItem> GetActionsNone () {
 				yield return new MenuItem("New Library", null, () => {

@@ -20,6 +20,8 @@ namespace fx {
 				BorderStyle = LineStyle.Single,
 				Title = "Terminal"
 			};
+			//Add file tree
+
 			var output = new TextView() {
 				X = 0,
 				Y = 0,
@@ -41,6 +43,7 @@ namespace fx {
 				// & echo !fx{{%cd%}}
 				var pi = new ProcessStartInfo("cmd.exe") {
 					Arguments = $"{cmd}",
+					WorkingDirectory = cwd,
 					WindowStyle = ProcessWindowStyle.Hidden,
 
 					UseShellExecute = false,

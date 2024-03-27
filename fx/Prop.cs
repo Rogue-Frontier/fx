@@ -18,6 +18,7 @@ public interface IProp {
 public static class Props {
 	public static IProp
 		IS_LOCKED = new Prop("locked", "Locked"),
+		IS_FILE = new Prop("file", "File"),
 		IS_DIRECTORY = new Prop("directory", "Directory"),
 		IS_STAGED = new Prop("gitStagedChanges", "- Staged Changes"),
 		IS_UNSTAGED = new Prop("gitUnstagedChanges", "- Unstaged Changes"),

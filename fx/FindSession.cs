@@ -53,7 +53,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height = 1,
-			Text = "Find"
+			Text = "[Find]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		y++;
 		var filterLabel = new Label() {
@@ -77,7 +79,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height = 1,
-			Text = "Find"
+			Text = "[Find]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		y++;
 		var findLabel = new Label() {
@@ -101,7 +105,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height = 1,
-			Text = "Find"
+			Text = "[Find]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		var findPrevButton = new Button() {
 			AutoSize = false,
@@ -109,7 +115,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height = 1,
-			Text = "<-"
+			Text = "[<-]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		var findNextButton = new Button() {
 			AutoSize = false,
@@ -117,7 +125,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height = 1,
-			Text = "->"
+			Text = "[->]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		y++;
 		var replaceLabel = new Label() {
@@ -126,7 +136,7 @@ public class FindSession {
 			Y = y,
 			Width = w,
 			Height = 1,
-			Text = "Replace"
+			Text = "Replace",
 		};
 		var replaceBar = new TextField() {
 			AutoSize = false,
@@ -141,7 +151,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height=1,
-			Text = "Replace"
+			Text = "[Replace]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		var replacePrevButton = new Button() {
 			AutoSize = false,
@@ -149,7 +161,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height=1,
-			Text = "<-"
+			Text = "[<-]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		var replaceNextButton = new Button() {
 			AutoSize = false,
@@ -157,7 +171,9 @@ public class FindSession {
 			Y = y,
 			Width = 6,
 			Height=1,
-			Text = "->"
+			Text = "[->]",
+			NoDecorations = true,
+			NoPadding = true
 		};
 		y++;
 		y++;
@@ -292,7 +308,7 @@ public class FindSession {
 			FindLine l => GetActions(l),
 			_ => throw new Exception()
 		}),
-		..ExploreSession.GetGeneralActions(main, ctx.GetCachedPathItem(item.path, ExploreSession.GetStaticProps))
+		..ExploreSession.GetStaticActions(main, ctx.GetCachedPathItem(item.path, ExploreSession.GetStaticProps))
 	];
 	IEnumerable<MenuItem> GetActions (FindDir d) {
 		yield return new MenuItem("Explore Dir", "", () => {

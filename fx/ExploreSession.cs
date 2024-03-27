@@ -609,15 +609,15 @@ public class ExploreSession {
 		};
 		return Process.Start(pi);
 	}
-
-
 	public static IEnumerable<IProp> GetStaticProps (string path) {
 		if(Directory.Exists(path)) {
 			yield return IS_DIRECTORY;
 			if(Directory.Exists($"{path}/.git")) {
 				yield return IS_REPOSITORY;
 			}
-		} else {
+		} else if(File.Exists(path)) {
+			yield return IS_FILE;
+
 			if(path.EndsWith(".sln")) {
 				yield return IS_SOLUTION;
 			}
@@ -630,6 +630,8 @@ public class ExploreSession {
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;
 			}
+		} else {
+			throw new Exception("What the hell is wrong with you?");
 		}
 	}
 
@@ -654,10 +656,22 @@ public class ExploreSession {
 		[..GetInstanceProps(path), .. GetStaticProps(path)];
 
 
-	public static IEnumerable<MenuItem> GetGeneralActions (Main main, PathItem item) {
+	public static IEnumerable<MenuItem> GetStaticActions (Main main, PathItem item) {
 		//yield return new MenuItem(item.local, null, null, () => false);
 		//yield return new MenuItem("----", null, null, () => false);
 
+
+		if(item.HasProp(IS_FILE)) {
+			yield return new MenuItem("Edit", null, () =>
+				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true)
+			);
+		}
+		yield return new MenuItem("Find...", null, () => {
+			var find = new FindSession(main, item.path);
+			main.folder.AddTab($"Find {item.path}", find.root, true);
+			find.rootBar.SetLock(true);
+			find.FindDirs();
+		});
 		if(main.ctx.fx.libraryData is { Count: > 0 } list) {
 			yield return new MenuBarItem("Libraries", [..list.Select(l => {
 				var link = l.links.FirstOrDefault(link => link.path == item.path);
@@ -670,43 +684,28 @@ public class ExploreSession {
 				}){ CheckType = MenuItemCheckStyle.Checked, Checked = link != null };
 			})]);
 		}
-
 		var pins = main.ctx.fx.pins;
 		var pin = pins.Contains(item.path);
-		yield return new MenuItem(pin ? "Unpin" : "Pin", null, () => {
-			if(pin) {
-				pins.Remove(item.path);
-			} else {
-				pins.Add(item.path);
-				
-			}
-		});
-
-		yield return new MenuItem("Find...", null, () => {
-			var find = new FindSession(main, item.path);
-			main.folder.AddTab($"Find {item.path}", find.root, true);
-			find.rootBar.SetLock(true);
-			find.FindDirs();
-		});
+		yield return new MenuItem(pin ? "Unpin" : "Pin", null, () =>
+			((Action<string>)(pin ? p => pins.Remove(p) : pins.Add))(item.path)
+			);
+		var locked = main.ctx.fx.locked;
+		var isLocked = locked.Contains(item.path);
+		yield return new MenuItem(isLocked ? "Unlock" : "Lock", null, () =>
+			((Func<string, bool>)(isLocked ? locked.Remove : locked.Add))(item.path)
+		);
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuItem("Open in System", "", () => RunCmd($"explorer.exe {item.path}"));
-		} else {
-			yield return new("Edit", null, () =>
-				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true)
-			);
 		}
 		yield return new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""));
-
-		yield return new("Delete", null, () => RequestConfirm($"Delete {item.path}"));
-
-		yield return new("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
-
+		yield return new MenuItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
+		yield return new MenuItem("Delete", null, () => RequestConfirm($"Delete {item.path}"));
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
 	/// <summary>
 	/// This should be refactored so that ctx handles path updates
 	/// </summary>
-	public IEnumerable<MenuItem> GetSpecifcActions(Main main, PathItem item) {
+	public IEnumerable<MenuItem> GetInstanceActions(Main main, PathItem item) {
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuItem("Remember", null, () => cwdRecall = item.path);
 			yield return new MenuItem("New File", null, () => RequestName("New File", name => {
@@ -732,6 +731,16 @@ public class ExploreSession {
 				return false;
 			}), canExecute: () => !item.HasProp(IS_LOCKED));
 
+
+			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
+				string local = GetRepoLocal(root, item.path);
+				yield return new MenuItem("Diff", null, () => {
+					using var repo = new Repository(root);
+					Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
+				});
+			}
+				
+
 			//Midnight Commander multi-move
 			yield return new MenuItem("Move", null, () => RequestName($"Move {item.path}", name => {
 				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
@@ -744,26 +753,26 @@ public class ExploreSession {
 				}
 				return false;
 			}));
-		} else {
+		} else if(item.HasProp(IS_FILE)) {
 			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
 				string local = GetRepoLocal(root, item.path);
 				var unstaged = item.HasProp(IS_UNSTAGED);
 				var staged = item.HasProp(IS_STAGED);
 				if(unstaged || staged) {
 					yield return new MenuItem("Diff", "", () => {
-						using(var repo = new Repository(root))
-							Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
+						using var repo = new Repository(root);
+						Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
 					});
 					if(unstaged) {
 						yield return new MenuItem("Stage", "", () => {
-							using(var repo = new Repository(root))
-								Commands.Stage(repo, local);
+							using var repo = new Repository(root);
+							Commands.Stage(repo, local);
 							RefreshCwd();
 						});
 					} else if(staged) {
 						yield return new MenuItem("Unstage", "", () => {
-							using(var repo = new Repository(root))
-								Commands.Unstage(repo, local);
+							using var repo = new Repository(root) ;
+							Commands.Unstage(repo, local);
 							RefreshCwd();
 						});
 					}
@@ -775,9 +784,9 @@ public class ExploreSession {
 		
 		
 		[new MenuItem("Cancel", "", () => { }),
-		.. GetSpecifcActions(main, item),
+		.. GetInstanceActions(main, item),
 		.. ctx.GetCommands(item),
-		.. GetGeneralActions (main, item)];
+		.. GetStaticActions (main, item)];
 
 	public static bool RequestConfirm (string title) {
 		var create = new Button() {
