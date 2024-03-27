@@ -14,9 +14,12 @@ using static Terminal.Gui.SpinnerStyle;
 using HWND = nint;
 
 
-public record WindowItem(HWND window, string name, string path);
+public record WindowItem(HWND window, string name, uint pid, string path);
 /// <summary>Contains functionality to get all the open windows.</summary>
-public static class OpenWindowGetter {
+public static class Monitor {
+	[DllImport("user32.dll")]
+	public static extern void SwitchToThisWindow (IntPtr hWnd, bool fAltTab);
+
 	/// <summary>Returns a dictionary that contains the handle and title of all the open windows.</summary>
 	/// <returns>A dictionary that contains the handle and title of all the open windows.</returns>
 	public static List<WindowItem> GetOpenWindows () {
@@ -35,9 +38,9 @@ public static class OpenWindowGetter {
 			GetWindowText(hWnd, builder, length + 1);
 			var name = builder.ToString();
 
-			var path = GetWindowModuleFileName(hWnd);
+			var path = GetWindowModuleFileName(hWnd, out var pid);
 
-			result.Add(new WindowItem(hWnd, name, path));
+			result.Add(new WindowItem(hWnd, name, pid, path));
 			return true;
 		}, 0);
 
@@ -81,12 +84,11 @@ public static class OpenWindowGetter {
 	[return: MarshalAs(UnmanagedType.Bool)]
 	static extern bool CloseHandle (IntPtr hObject);
 
-	private static string GetWindowModuleFileName (IntPtr hWnd) {
-		uint processId = 0;
+	private static string GetWindowModuleFileName (IntPtr hWnd, out uint pid) {
 		const int nChars = 1024;
 		StringBuilder filename = new StringBuilder(nChars);
-		GetWindowThreadProcessId(hWnd, out processId);
-		IntPtr hProcess = OpenProcess(1040, 0, processId);
+		GetWindowThreadProcessId(hWnd, out pid);
+		IntPtr hProcess = OpenProcess(1040, 0, pid);
 		GetModuleFileNameEx(hProcess, IntPtr.Zero, filename, nChars);
 		CloseHandle(hProcess);
 		return (filename.ToString());

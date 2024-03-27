@@ -16,6 +16,7 @@ namespace fx {
 				Y=0,
 				Width=Dim.Fill(),
 				Height=Dim.Fill(),
+
 				BorderStyle = LineStyle.Single,
 				Title = "Terminal"
 			};

@@ -31,7 +31,7 @@ using System.Collections.Concurrent;
 using System.Drawing;
 using Attribute = Terminal.Gui.Attribute;
 
-var a = OpenWindowGetter.GetOpenWindows();
+var a = fx.Monitor.GetOpenWindows();
 var b = 0;
 try {
 	Application.Init();

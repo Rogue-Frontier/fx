@@ -50,7 +50,7 @@ public class ExploreSession {
 		this.main = main;
 		this.cwd = initCwd;
 		var favData = new List<PathItem>();
-		var procData = new List<ProcItem>();
+		var procData = new List<WindowItem>();
 
 		main.TermEnter += OnTermEnter;
 
@@ -71,7 +71,7 @@ public class ExploreSession {
 			ReadOnly = true,
 			CanFocus = false
 		};
-		var freqPane = new FrameView() {
+		var freqPane = new View() {
 			Title = "Recents",
 			BorderStyle= LineStyle.Single,
 			X = 0,
@@ -87,7 +87,7 @@ public class ExploreSession {
 			Source= new ListWrapper(new List<string>())
 		};
 		var clipPane = new Lazy<View>(() => {
-			var view = new FrameView() {
+			var view = new View() {
 				Title = "Clipboard",
 				BorderStyle = LineStyle.Single,
 				X = 0,
@@ -120,8 +120,9 @@ public class ExploreSession {
 			return view;
 		}).Value;
 
-		var pathPane = new FrameView() {
+		var pathPane = new View() {
 			Title = "Directory",
+			BorderStyle = LineStyle.Single,
 
 			X = Pos.Percent(25),
 			Y = 1,
@@ -143,9 +144,10 @@ public class ExploreSession {
 			Width = Dim.Percent(50),
 			Height = Dim.Fill(1),
 		};
-		var procPane = new FrameView() {
+		var procPane = new View() {
 			Title = "Processes",
 			BorderStyle = LineStyle.Single,
+
 			X = Pos.Percent(75),
 			Y = 1,
 			Width = Dim.Percent(25),
@@ -156,7 +158,7 @@ public class ExploreSession {
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
-			Source = new ListWrapper(new List<ProcItem>()),
+			Source = new ListMarker<WindowItem>(procData, (w, index) => $"{Path.GetFileName(w.path), -20} {w.name}"),
 			ColorScheme = new() {
 				HotNormal = new(Color.Black, Color.White),
 				Normal = new(Color.White, Color.Blue),
@@ -165,7 +167,7 @@ public class ExploreSession {
 				Disabled = new(Color.Red, Color.Black)
 			}
 		};
-		var repoPane = new FrameView() {
+		var repoPane = new View() {
 			Title = "Repo",
 			BorderStyle = LineStyle.Single,
 			X = Pos.Percent(75),
@@ -371,22 +373,46 @@ public class ExploreSession {
 					_ => null
 				};
 			});
-
 			procList.KeyDownD(new() {
 				[KeyCode.CursorLeft] = default,
 				[KeyCode.CursorRight] = default,
+				[KeyCode.Enter] = _ => {
+					var item = procData[procList.SelectedItem];
+					Monitor.SwitchToThisWindow(item.window, true);
+				},
 				[KeyCode.Backspace] = _ => {
 					if(!(procList.SelectedItem < procData.Count))
 						return;
 					var p = procData[procList.SelectedItem];
-					p.p.Kill();
+					Process.GetProcessById((int)p.pid).Kill();
 					procData.Remove(p);
 					procList.SetNeedsDisplay();
 				}
 			}, new() {
-				['\''] = _ => UpdateProcesses()
-			});
+				['\''] = _ => UpdateProcesses(),
+				['/'] = _ => {
 
+					var ind = procList.SelectedItem;
+					//procData.RemoveAll(w => Process.GetProcessById((int)w.pid) == null);
+					if(!(ind > -1 && ind < procData.Count)) {
+						return;
+					}
+					var item = procData[ind];
+					IEnumerable<MenuItem> GetActions () {
+						yield return new MenuItem("Cancel", null, () => { });
+						yield return new MenuItem("Switch To", null, () => {
+							Monitor.SwitchToThisWindow(item.window, true);
+						});
+						yield return new MenuItem("Kill", null, () => {
+							Process.GetProcessById((int)item.pid).Kill();
+							UpdateProcesses();
+						});
+					}
+
+					SView.ShowContext(procList, [..GetActions()], ind+2, 0);
+				//Context menu
+				},
+			});
 			repoList.OpenSelectedItem += (a, e) => {
 				var item = gitData[e.Item];
 				if(item.staged) Commands.Unstage(git.repo, item.local);
@@ -462,7 +488,8 @@ public class ExploreSession {
 				Enumerable.Range(0, times).All(
 					_ => Path.GetFullPath(Path.Combine(cwd, "..")) is { } s && s != cwd && GoPath(s));
 			void GoItem () {
-				if(!(pathList.SelectedItem < cwdData.Count)) {
+				var ind = pathList.SelectedItem;
+				if(!(ind > -1 && ind < cwdData.Count)) {
 					return;
 				}
 				Go(cwdData[pathList.SelectedItem]);
@@ -497,7 +524,8 @@ public class ExploreSession {
 		}
 		void UpdateProcesses () {
 			procData.Clear();
-			procData.AddRange(Process.GetProcesses().Where(p => p.MainWindowHandle != 0).Select(p => new ProcItem(p)));
+			procData.AddRange(Monitor.GetOpenWindows());
+			//procList.SetSource(procData);
 			procList.SetNeedsDisplay();
 		}
 		/*
