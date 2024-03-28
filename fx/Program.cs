@@ -71,17 +71,15 @@ public class Main {
 			DesiredCursorVisibility = CursorVisibility.Box,
 			TabStop = false
 		};
-		term.Leave += (a, e) => {
-			term.SetLock();
-		};
-		term.MouseClick += (a, e) => {
-			if(e.MouseEvent.Flags == Button1Clicked) {
+		term.Leave += (a, e) => term.SetLock();
+		term.MouseClickD(new() {
+			[Button1Clicked] = e => {
 				if(!term.HasFocus) {
 					FocusTerm();
 					e.Handled = true;
 				}
 			}
-		};
+		});
 		term.KeyDownD(new() {
 			[(int)Esc] = e => {
 				term.SetLock();
@@ -106,11 +104,9 @@ public class Main {
 				}
 				term.SetLock(true);
 				term.SuperView.SetFocus();
-
 				if(termPrev?.IsAdded == true) {
 					termPrev.SetFocus();
 				}
-
 				e.Handled = true;
 			}
 		});
@@ -138,8 +134,6 @@ public class Main {
 			Height = Dim.Fill(3),
 		});
 		exploreSession = new ExploreSession(this, Environment.CurrentDirectory);
-
-
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
 		var termView = new Lazy<View>(() => {
@@ -156,7 +150,7 @@ public class Main {
 			InitTree([view, text]);
 			return view;
 		}).Value;
-		foreach(var(name, view) in new Dictionary<string, View>() {
+		foreach(var (name, view) in new Dictionary<string, View>() {
 			["Home"] = homeSession.root,
 			["Expl"] = exploreSession.root,
 		}) {
@@ -181,15 +175,17 @@ public class Main {
 		InitTree([
 			[window, folder.root, termBar]
 		]);
+
+		IEnumerable<MenuBarItem> GetBarItems () {
+			yield return new MenuBarItem("_Fx", [
+				new MenuItem("Reload", "", ctx.ResetCommands)
+			]) { CanExecute = () => true };
+			yield return new MenuBarItem("Tab_s", Array.Empty<MenuBarItem>()) { CanExecute = () => true };
+		}
 		var windowMenuBar = new MenuBar() {
 			Visible = true,
 			Enabled = true,
-			Menus = [
-				new MenuBarItem("File", [
-				new MenuItem("Reload", "", ctx.ResetCommands)
-			]){
-				CanExecute = () => true
-			}]
+			Menus = [..GetBarItems()]
 		};
 		root = [window, windowMenuBar];
 	}

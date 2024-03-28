@@ -717,11 +717,22 @@ public class ExploreSession {
 			((Func<string, bool>)(isLocked ? locked.Remove : locked.Add))(item.path)
 		);
 		if(item.HasProp(IS_DIRECTORY)) {
-			yield return new MenuItem("Open in System", "", () => RunCmd($"explorer.exe {item.path}"));
+			//yield return new MenuItem("Open in System", "", () => RunCmd($"explorer.exe {item.path}"));
+			yield return new MenuItem("Delete", null, () => {
+				if(RequestConfirm($"Delete {item.path}")) {
+					Directory.Delete(item.path);
+				}
+			});
+		} else {
+			yield return new MenuItem("Delete", null, () => {
+				if(RequestConfirm($"Delete {item.path}")) {
+					File.Delete(item.path);
+				}
+			});
 		}
 		yield return new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""));
 		yield return new MenuItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
-		yield return new MenuItem("Delete", null, () => RequestConfirm($"Delete {item.path}"));
+		
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
 	//
@@ -760,9 +771,22 @@ public class ExploreSession {
 					Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
 				});
 			}
-				
+
 
 			//Midnight Commander multi-move
+
+
+			yield return new MenuItem("Copy", null, () => RequestName($"Copy {item.path}", name => {
+				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
+					File.Copy(item.path, f);
+					if(item.path.StartsWith(cwd)) {
+						RefreshCwd();
+						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					}
+					return true;
+				}
+				return false;
+			}, item.path));
 			yield return new MenuItem("Move", null, () => RequestName($"Move {item.path}", name => {
 				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
 					File.Move(item.path, f);
@@ -773,7 +797,7 @@ public class ExploreSession {
 					return true;
 				}
 				return false;
-			}));
+			}, item.path));
 		} else if(item.HasProp(IS_FILE)) {
 			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
 				string local = GetRepoLocal(root, item.path);
@@ -799,6 +823,31 @@ public class ExploreSession {
 					}
 				}
 			}
+
+
+			yield return new MenuItem("Copy", null, () => RequestName($"Copy {item.path}", name => {
+				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
+					File.Copy(item.path, f);
+					if(item.path.StartsWith(cwd)) {
+						RefreshCwd();
+						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					}
+					return true;
+				}
+				return false;
+			}, item.path));
+			yield return new MenuItem("Move", null, () => RequestName($"Move {item.path}", name => {
+				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
+					File.Move(item.path, f);
+					if(item.path.StartsWith(cwd)) {
+						RefreshCwd();
+						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+					}
+					return true;
+				}
+				return false;
+			}, item.path));
+
 		}
 	}
 	public IEnumerable<MenuItem> GetSingleActions (Main main, PathItem item) =>
@@ -832,7 +881,7 @@ public class ExploreSession {
 		Application.Run(d);
 		return result;
 	}
-	public static void RequestName (string title, Predicate<string> accept) {
+	public static void RequestName (string title, Predicate<string> accept, string first = null) {
 		var confirm = new Button() {
 			Title = "Confirm",
 			Enabled = false
@@ -850,6 +899,7 @@ public class ExploreSession {
 			Y = 1,
 			Width = Dim.Fill(2),
 			Height = 1,
+			Text = first ?? ""
 		};
 		input.TextChanging += (_,e) => confirm.Enabled = e.NewValue.Any();
 		input.KeyDownD(new() {

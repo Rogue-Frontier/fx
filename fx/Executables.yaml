@@ -2,3 +2,4 @@
 np: C:/Program Files/Notepad++/notepad++.exe
 cx: ../../../../cx/bin/Debug/net9.0/cx.exe
 vi: C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe
+ffmpeg: ffmpeg

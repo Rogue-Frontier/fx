@@ -16,7 +16,7 @@
     file:
       - ext: csproj
   #tag: C# Project
-- name: Public C# Project
+- name: Publish C# Project
   fmt: dotnet publish --project {0}
   targetAny:
     dir:
@@ -43,4 +43,14 @@
   program: np
   targetAny:
     file:
-      - ext: xml|json|yaml|log|txt|gitignore
+      - ext: h|c|hpp|cpp|cs|java|xml|json|yaml|log|txt|gitignore
+- name: Make icon
+  fmt: ffmpeg -i {0} {0}.ico
+  targetAny:
+    file:
+      - ext: png
+- name: Edit in Aseprite
+  fmt: explorer steam://rungameid/431730
+  targetAny:
+    file:
+      - ext: png
