@@ -156,17 +156,6 @@ public class HomeSession {
 				});
 			}
 			IEnumerable<MenuItem> GetPathActions(string path) {
-				if(Path.GetDirectoryName(path) is { } par) {
-					yield return new MenuBarItem("Explore Location", null, () => {
-						main.folder.AddTab("Expl", new ExploreSession(main, par).root, true);
-					}) {
-						Children = [new MenuItem("Use system viewer", null, () => {
-						ExploreSession.RunCmd($"explorer.exe {path}");
-					})]
-					};
-				}
-				
-
 				var pathItem = ctx.GetPathItem(path, ExploreSession.GetStaticProps);
 				foreach(var c in ctx.GetCommands(pathItem)) yield return c;
 				foreach(var c in ExploreSession.GetStaticActions(main, pathItem)) yield return c;

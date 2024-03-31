@@ -31,7 +31,11 @@ namespace fx {
 			}
 			//https://stackoverflow.com/questions/29991184/clang-matchers-find-the-corresponding-node-in-ast-by-translation-unit-line-num
 			Dictionary<string, CppFile> source = new();
-			TraverseFile(mainCpp);
+
+			Queue<string> traverse = new([mainCpp]);
+			while(traverse.Any()) {
+				TraverseFile(traverse.Dequeue());
+			}
 			void TraverseFile(string path) {
 				var Index = CXIndex.Create(false, false);
 				var flags = CXTranslationUnit_Flags.CXTranslationUnit_DetailedPreprocessingRecord;
@@ -71,7 +75,9 @@ namespace fx {
 					void Register (string dest) {
 						sourceFile.includePath[item] = dest;
 						if(!source.ContainsKey(dest)) {
-							TraverseFile(dest);
+							source[dest] = null;
+							traverse.Enqueue(dest);
+
 						}
 					}
 				}
@@ -115,8 +121,13 @@ namespace fx {
 					}
 				}
 			}
-			return null;
+			return new CppProject() {
+				main = mainCpp,
+				source = source
+			};
 		}
+
+		/*
 		public CppProject(string mainFile) {
 			var dir = Path.GetDirectoryName(mainFile);
 			var Index = CXIndex.Create(false, false);
@@ -133,11 +144,12 @@ namespace fx {
 				f.Location.GetFileLocation(out var _, out var row, out var col, out var _);
 				return (f.Name, row, col);
 			});
-			*/
+			/
 
 
 
 		}
+		*/
 	}
 
 	public record CppFile() {

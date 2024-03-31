@@ -62,6 +62,7 @@ public class GodotScene {
 			var items = ParsePairs(pairs);
 			while(text.MatchArray("""^(?<key>[^\s]+) = (?<val>[^\s]+)\s*""", 1, out end) is [{}key, { } val]) {
 				items[key] = val;
+				text = text[end..];
 			}
 			IResource s = new Resource() { pairs = items };
 			switch(items["type"]) {
@@ -99,7 +100,6 @@ public class GodotScene {
 				items[key] = val;
 				text = text[end..];
 			}
-
 			PackedScene _instance = null;
 			if(instance is [{ }inst] && inst.MatchArray("""instance=ExtResource\("(?<id>[^"]+)"\)""", 1) is [{ } id]) {
 				items["instance"] = $"""ExtResource("{id}")""";
@@ -130,9 +130,9 @@ public class GodotScene {
 				node[path] = n;
 				n._parent._children.Add(n);
 			}
-
-
 		}
+
+		//to do: animationplayer, skeleton, animation
 
 		Dictionary<string, string> ParsePairs (string[] pairs) {
 			Dictionary<string, string> items = new();
