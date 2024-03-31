@@ -27,6 +27,7 @@ using System.IO;
 
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
+using System.Text.RegularExpressions;
 namespace fx;
 public class ExploreSession {
 	public View root;
@@ -270,6 +271,7 @@ public class ExploreSession {
 				return (Action?)((int)e.KeyCode switch {
 					(int)Enter or (int)CursorRight => () => GoItem(),
 					(int)CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
+					(int)Esc => () => { },
 					/*
 					Key.Space => () => {
 						if(!(pathList.SelectedItem < cwdData.Count)) {
@@ -285,7 +287,7 @@ public class ExploreSession {
 
 					'F' | (int)CtrlMask => () => {
 						var find = new FindSession(main, cwd);
-						main.folder.AddTab($"Find {cwd}", find.root, true);
+						main.folder.AddTab($"Find {cwd}", find.root, true, root.Focused);
 						find.rootBar.SetLock(true);
 						find.FindDirs();
 					}
@@ -558,7 +560,7 @@ public class ExploreSession {
 			cmd = string.Format(cmd, [..cwdData.Select(p => p.local)]);
 		}
 
-		if(cmd.MatchArray("cd (?<dest>.+)") is [_, { } dest]) {
+		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
 			if(!GoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
 
 			}
@@ -616,6 +618,16 @@ public class ExploreSession {
 		};
 		return Process.Start(pi);
 	}
+
+	public static Process StartCmd (string path) {
+		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Executables")}'";
+		var pi = new ProcessStartInfo("cmd.exe") {
+			Arguments = $"/k cd {path}",
+			WorkingDirectory = path,
+			UseShellExecute = true,
+		};
+		return Process.Start(pi);
+	}
 	public static IEnumerable<IProp> GetStaticProps (string path) {
 		if(Directory.Exists(path)) {
 			yield return IS_DIRECTORY;
@@ -667,22 +679,77 @@ public class ExploreSession {
 		//yield return new MenuItem(item.local, null, null, () => false);
 		//yield return new MenuItem("----", null, null, () => false);
 
-		if(item.HasProp(IS_DIRECTORY)) {
-			yield return new MenuItem("Term", null, () => {
-				var session = new TermSession(main, item.path);
-				main.folder.AddTab($"Term {item.path}", session.root, true);
+		var action_command = new MenuItem("Command", null, () => {
+			RequestName("Command", cmd => {
+				cmd = string.Format(cmd, item.path);
+				ExploreSession.RunCmd(cmd);
+				return true;
 			});
+		});
+
+		MenuItem UseSystemTerminal (string path) =>
+			new MenuItem("Use system terminal", null, () => {
+				ExploreSession.StartCmd(path);
+			});
+
+		if(item.HasProp(IS_DIRECTORY)) {
+			yield return new MenuBarItem("Explore", null, () => {
+				main.folder.AddTab("Expl", new ExploreSession(main, item.path).root, true);
+			}) {
+				Children = [new MenuItem("Use system viewer", null, () => {
+					RunCmd($"explorer.exe {item.path}");
+				})]
+			};
+			yield return new MenuBarItem("Term", null, () => {
+				var session = new TermSession(main, item.path);
+				main.folder.AddTab($"Term {item.path}", session.root, true, main.root.FirstOrDefault()?.Focused);
+			}) {
+				Children = [
+					UseSystemTerminal(item.path),
+					action_command
+				]
+			};
 		} else if(item.HasProp(IS_FILE)) {
 			yield return new MenuItem("Edit", null, () =>
-				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true)
+				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true, main.root.FirstOrDefault()?.Focused)
 			);
 		}
-		yield return new MenuItem("Find", null, () => {
+
+		if(Path.GetDirectoryName(item.path) is { } par) {
+
+			yield return new MenuBarItem("Term parent", null, () => {
+				var session = new TermSession(main, item.path);
+				main.folder.AddTab($"Term {par}", session.root, true, main.root.FirstOrDefault()?.Focused);
+			}) {
+				Children = [
+					UseSystemTerminal(item.path),
+					action_command
+				]
+			};
+			yield return new MenuBarItem("Explore parent", null, () => {
+				main.folder.AddTab("Expl", new ExploreSession(main, par).root, true);
+			}) {
+				Children = [
+					new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{par}"""))
+				]
+			};
+		}
+
+		yield return new MenuBarItem("Find", null, () => {
 			var find = new FindSession(main, item.path);
 			main.folder.AddTab($"Find {item.path}", find.root, true);
 			find.rootBar.SetLock(true);
 			find.FindDirs();
-		});
+		}) {
+			Children = [
+				new MenuItem("Grep", null, () => {
+					RequestName("Grep", pattern => {
+						var reg = new Regex(pattern);
+						return true;
+					});
+				})
+			]
+		};
 		yield return new MenuBarItem("Library", [
 			..main.ctx.fx.libraryData.Select(l => {
 				var link = l.links.FirstOrDefault(link => link.path == item.path);
@@ -730,7 +797,6 @@ public class ExploreSession {
 				}
 			});
 		}
-		yield return new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""));
 		yield return new MenuItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
 		
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));

@@ -20,6 +20,9 @@ public class FindSession {
 	private Ctx ctx;
 
 	private Main main;
+
+
+
 	public FindSession (Main main, string path) {
 		ctx = main.ctx;
 		this.main = main;
@@ -132,6 +135,7 @@ public class FindSession {
 			NoPadding = true
 		};
 		y++;
+		/*
 		var replaceLabel = new Label() {
 			AutoSize = false,
 			X = 0,
@@ -178,6 +182,15 @@ public class FindSession {
 			NoPadding = true
 		};
 		y++;
+		*/
+
+		var bar = new LineView() {
+			X = 0,
+			Y = y,
+			Width = Dim.Fill(),
+			Height = 1,
+			Orientation = Orientation.Horizontal
+		};
 		y++;
 		tree = new TreeView<IFind>(new TreeFinder(filter)) {
 
@@ -201,12 +214,12 @@ public class FindSession {
 				int i = 0;
 			},
 			[(int)Esc] = _ => {
-				main.folder.RemoveTab(root);
+				main.folder.RemoveTab(root, out var _);
 			}
 		});
 		root.KeyDownD(new() {
 			[(int)Esc] = _=> {
-				main.folder.RemoveTab(root);
+				main.folder.RemoveTab(root, out var _);
 			},
 			['>'] = _ => {
 				main.folder.SwitchTab();
@@ -288,7 +301,8 @@ public class FindSession {
 			rootLabel, rootBar, rootShowButton,
 			filterLabel, filterBar, filterShowButton,
 			findLabel, findBar, findAllButton, findPrevButton, findNextButton,
-			replaceLabel, replaceBar, replaceAllButton, replacePrevButton, replaceNextButton,
+			//replaceLabel, replaceBar, replaceAllButton, replacePrevButton, replaceNextButton,
+			bar,
 			tree
 			]);
 	}
@@ -319,7 +333,7 @@ public class FindSession {
 	];
 	IEnumerable<MenuItem> GetActions (FindDir d) {
 		yield return new MenuItem("Explore", "", () => {
-			main.folder.AddTab($"Expl {d.name}", new ExploreSession(main, d.path).root, true);
+			main.folder.AddTab($"Expl {d.name}", new ExploreSession(main, d.path).root, true, root.Focused);
 		});
 	}
 	IEnumerable<MenuItem> GetActions (FindFile f) {
@@ -385,7 +399,7 @@ public class FindSession {
 		);
 
 		yield return new MenuItem("Edit", "", () => {
-			main.folder.AddTab($"Edit {l.path}", new EditSession(l.path, l.row, l.col).root, true);
+			main.folder.AddTab($"Edit {l.path}", new EditSession(l.path, l.row, l.col).root, true, root.Focused);
 		});
 
 		yield return new MenuItem("Copy Group", "", () => { });

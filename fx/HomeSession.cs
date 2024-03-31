@@ -140,8 +140,6 @@ public class HomeSession {
 					}
 					return false;
 				}));
-
-
 			}
 			IEnumerable<MenuItem> GetItemActions (LibraryItem item) {
 				foreach(var it in GetPathActions(item.path)) yield return it;
@@ -158,14 +156,16 @@ public class HomeSession {
 				});
 			}
 			IEnumerable<MenuItem> GetPathActions(string path) {
-				if(Directory.Exists(path)) {
-					yield return new MenuItem("Explore", null, () => {
-						main.folder.AddTab("Expl", new ExploreSession(main, path).root, true);
-					});
+				if(Path.GetDirectoryName(path) is { } par) {
+					yield return new MenuBarItem("Explore Location", null, () => {
+						main.folder.AddTab("Expl", new ExploreSession(main, par).root, true);
+					}) {
+						Children = [new MenuItem("Use system viewer", null, () => {
+						ExploreSession.RunCmd($"explorer.exe {path}");
+					})]
+					};
 				}
-				yield return new MenuItem("Explore Location", null, () => {
-					main.folder.AddTab("Expl", new ExploreSession(main, Path.GetDirectoryName(path)).root, true);
-				});
+				
 
 				var pathItem = ctx.GetPathItem(path, ExploreSession.GetStaticProps);
 				foreach(var c in ctx.GetCommands(pathItem)) yield return c;

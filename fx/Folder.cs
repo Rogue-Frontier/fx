@@ -5,6 +5,7 @@ using fx;
 
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
+using System.Security.Cryptography.X509Certificates;
 namespace fx;
 
 //TO DO: Move tabs to side
@@ -15,6 +16,7 @@ public record Folder {
 	private List<View> bars = new();
 	private List<Tab> tabsList = new();
 	private Dictionary<View, Tab> tabs = new();
+	private Dictionary<Tab, View> prevView = new();
 	public Folder(View root, params(string name, View view)[] tabs) {
 		this.root = root;
 		head = new View() {
@@ -69,21 +71,42 @@ public record Folder {
 		}
 		head.SetNeedsDisplay();
 	}
-	public Tab AddTab(string name, View view, bool show = false) {
+	public Tab AddTab(string name, View view, bool show = false, View prevItem = null) {
 		var tab = new Tab(name, view);
 		tab.Place(this);
 		tabs[view] = tab;
 		tabsList.Add(tab);
+
+		if(prevItem != null) {
+			prevView[tab] = prevItem;
+		}
 		if(show) {
 			FocusTab(tab);
 		}
 		return tab;
 	}
-	public bool RemoveTab () => RemoveTab(currentBody);
-	public bool RemoveTab(View view) {
-		if(tabs.Remove(view, out var tab)) {
+	public bool RemoveTab () {
+		var b = RemoveTab(currentBody, out var tab);
+		if(prevView.GetValueOrDefault(tab) is { } v && GetParentTab(v) is { }t) {
+			FocusTab(t);
+			v.SetFocus();
+		}
+		return b;
+	}
+	public bool RemoveTab(View view, out Tab tab) {
+		if(tabs.Remove(view, out tab)) {
 			int index = tabsList.IndexOf(tab);
 			tabsList.Remove(tab);
+			prevView.Remove(tab);
+
+			if(currentBody == null) {
+
+			} else if(currentBody == view) {
+
+			} else {
+
+			}
+
 			if(currentBody is { } v) {
 				if(v == view) {
 					body.RemoveAll();
@@ -101,11 +124,22 @@ public record Folder {
 		}
 		return false;
 	}
-
-	public void FocusTab(Tab tab) {
+	public Tab GetParentTab(View v) {
+		while(v != null) {
+			if(tabs.TryGetValue(v, out var tab)) {
+				return tab;
+			}
+			v = v.SuperView;
+		}
+		return null;
+	}
+	public void FocusTab(Tab tab, bool focus = true) {
 		SelectTab(tab);
 		body.Title = tab.name;
 		SetBody(tab.view);
+		if(focus) {
+			tab.view.SetFocus();
+		}
 	}
 	private void SelectTab(Tab tab) {
 		foreach(var t in tabs.Values) {
@@ -124,9 +158,9 @@ public record Folder {
 				return;
 			}
 			var next = tabsList[(tabsList.IndexOf(tab) + inc + c) % c];
-			FocusTab(next);
+			FocusTab(next, false);
 		} else {
-			FocusTab(tabsList[0]);
+			FocusTab(tabsList[0], false);
 		}
 	}
 	public void SetBody (View view) {
@@ -170,7 +204,7 @@ public record Tab {
 				Y = 0,
 			};
 			kill.MouseEvD(new() {
-				[(int)Button1Pressed] = _ => folder.RemoveTab(view)
+				[(int)Button1Pressed] = _ => folder.RemoveTab(view, out var _)
 			});
 			InitTree([[root, kill]]);
 			return root;

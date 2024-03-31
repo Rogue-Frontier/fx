@@ -33,8 +33,13 @@ using Attribute = Terminal.Gui.Attribute;
 
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
-var a = fx.Monitor.GetOpenWindows();
-var b = 0;
+using ClangSharp;
+using ClangSharp.Interop;
+using Type = System.Type;
+
+var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
+CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
+
 try {
 	Application.Init();
 	var main = new Main();
@@ -54,8 +59,8 @@ public class Main {
 	public TextField term;
 	public Folder folder;
 	public bool readProc = false;
-	private ExploreSession exploreSession;
-	public Action<TermEvent> TermEnter = default;
+	public event Action<TermEvent> TermEnter = default;
+	public event Action<string[]> FilesChanged = default;
 	public void ReadProc(Process proc) {
 		//TerminalView.cs
 	}
@@ -133,7 +138,7 @@ public class Main {
 			Width = Dim.Fill(),
 			Height = Dim.Fill(3),
 		});
-		exploreSession = new ExploreSession(this, Environment.CurrentDirectory);
+		var exploreSession = new ExploreSession(this, Environment.CurrentDirectory);
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
 		var termView = new Lazy<View>(() => {
@@ -199,7 +204,8 @@ public class Main {
 }
 //public record Session(Fx state, Ctx temp);
 public record Fx {
-	public const string		SAVE_PATH = "fx.state.yaml";
+	public static string SAVE_PATH { get; } =
+		$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/state.yaml";
 	public const string		WORK_ROOT = "%WORKROOT%";
 	public HashSet<string>	locked =	new();
 	public List<string>		pins =	new();
@@ -238,8 +244,10 @@ public record Ctx {
 		ResetCommands();
 	public void Load () =>
 		fx.Load(this);
-	public void Save () =>
+	public void Save () {
+		Directory.CreateDirectory(Path.GetDirectoryName(Fx.SAVE_PATH));
 		File.WriteAllText(Fx.SAVE_PATH, se.Serialize(fx).Replace(USER_PROFILE, USER_PROFILE_MASK));
+	}
 	public void ResetCommands () {
 
 		var dir = Command.EXECUTABLES_DIR;

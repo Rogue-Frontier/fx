@@ -27,8 +27,17 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="ClangSharp" Version="17.0.1" />
+    <PackageReference Include="EnumerableExtensions" Version="3.0.0" />
+    <PackageReference Include="GDShrapt.Reader" Version="4.2.0-alpha" />
+    <PackageReference Include="libclang.runtime.linux-x64" Version="17.0.4" />
+    <PackageReference Include="libclang.runtime.win-x64" Version="17.0.4" />
+    <PackageReference Include="libClangSharp" Version="17.0.4" />
+    <PackageReference Include="libClangSharp.runtime.linux-x64" Version="17.0.4" />
+    <PackageReference Include="libClangSharp.runtime.win-x64" Version="17.0.4" />
     <PackageReference Include="LibGit2Sharp" Version="0.29.0" />
     <PackageReference Include="Microsoft.Build" Version="17.9.5" />
+    <PackageReference Include="RangeExtensions" Version="2.1.1" />
     <PackageReference Include="YamlDotNet" Version="15.1.2" />
   </ItemGroup>
   <ItemGroup>
