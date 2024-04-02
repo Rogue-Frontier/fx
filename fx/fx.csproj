@@ -30,6 +30,7 @@
     <PackageReference Include="ClangSharp" Version="17.0.1" />
     <PackageReference Include="EnumerableExtensions" Version="3.0.0" />
     <PackageReference Include="GDShrapt.Reader" Version="4.2.0-alpha" />
+    <PackageReference Include="Google.Apis.Calendar.v3" Version="1.67.0.3297" />
     <PackageReference Include="libclang.runtime.linux-x64" Version="17.0.4" />
     <PackageReference Include="libclang.runtime.win-x64" Version="17.0.4" />
     <PackageReference Include="libClangSharp" Version="17.0.4" />

@@ -36,9 +36,11 @@ using static Terminal.Gui.KeyCode;
 using ClangSharp;
 using ClangSharp.Interop;
 using Type = System.Type;
+using Calendar = fx.Calendar;
+using Google.Apis.Auth.OAuth2;
 
-var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
-CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
+//var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
+//CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
 
 try {
 	Application.Init();
@@ -158,8 +160,9 @@ public class Main {
 		foreach(var (name, view) in new Dictionary<string, View>() {
 			["Home"] = homeSession.root,
 			["Expl"] = exploreSession.root,
+			["Cal"] = new Calendar(this).root,
 		}) {
-			folder.AddTab(name, view);
+			folder.AddTab(name, view, true);
 		}
 		folder.SwitchTab();
 		var window = new Window() {
@@ -203,6 +206,15 @@ public class Main {
 	}
 }
 //public record Session(Fx state, Ctx temp);
+
+public record OAuth (string email, string clientId, string clientSecret) {
+	public OAuth () : this(null, null, null) { }
+	[YamlIgnore]
+	public ClientSecrets secrets => new(){
+		ClientId = clientId,
+		ClientSecret = clientSecret
+	};
+}
 public record Fx {
 	public static string SAVE_PATH { get; } =
 		$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/state.yaml";
@@ -211,16 +223,21 @@ public record Fx {
 	public List<string>		pins =	new();
 	public string			workroot =	null; //move to ExplorerSession
 
+
+	//public List<OAuth> accounts;
 	public List<Library>	libraryData = new();
 	public Fx () { }
 	public Fx (Ctx ctx) =>	Load(ctx);
 	public void Load (Ctx ctx) {
 		if(File.Exists(SAVE_PATH)) {
 			try {
+
 				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE));
 				foreach(var f in GetType().GetFields( BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)) {
 					f.Copy(this, o);
 				}
+			} catch(Exception e) {
+
 			}
 #if false
 			catch {

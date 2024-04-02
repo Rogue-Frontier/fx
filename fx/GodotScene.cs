@@ -109,7 +109,6 @@ public class GodotScene {
 				items.GetValueOrDefault("script")?.MatchArray("""ExtResource\("(?<id>[^"]+)"\)""", 1) is [{ } scriptId] ?
 					script[scriptId] :
 					null;
-
 			if(root == null) {
 				node["."] = root = (new Node() {
 					pairs = items,

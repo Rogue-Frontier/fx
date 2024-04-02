@@ -206,7 +206,7 @@ public record LibraryLeaf (string path) : ILibraryTree, ILibraryPath {
 public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : IListDataSource where T:class {
 	public int Count => list.Count;
 	public int Length { get; }
-	HashSet<T> marked = new();
+	public HashSet<T> marked = new();
 	public bool IsMarked (int item) => marked.Contains(list[item]);
 	public void Render (ListView container, ConsoleDriver driver, bool selected, int item, int col, int line, int width, int start = 0) {
 		container.Move(col, line);
@@ -224,6 +224,9 @@ public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : ILis
 				driver.AddRune((Rune)' ');
 			}
 		}
+	}
+	public void UpdateMarked () {
+		marked.IntersectWith(list);
 	}
 
 	public void SetMark (int item, bool value) =>
