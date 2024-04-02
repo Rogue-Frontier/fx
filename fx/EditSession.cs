@@ -25,17 +25,33 @@ public class EditSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		var save = new Label() {
+		var save = new Button() {
 			AutoSize = false,
-			X = 8,
+			X = 0,
 			Y = 0,
-			Width = 4,
+			Width = 6,
 			Height = 1,
 			Text = "Save",
+			NoDecorations = false,
+			NoPadding = true
 		};
 
+		var mode = new Label() {
+			AutoSize = false,
+			X = 0,
+			Y = 0,
+			Width = 8,
+			Height = 1,
+			Text = "INSERT",
+		};
+
+		bool edit = true;
+		void RefreshMode () {
+			mode.Text = edit ? "EDIT" : "READ";
+		}
+
 		var textView = new TextView() {
-			X = 8,
+			X = 0,
 			Y = 2,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
@@ -48,19 +64,25 @@ public class EditSession {
 				File.WriteAllText(path, textView.Text);
 			}
 		});
-
-
 		textView.KeyDownD(new() {
 			[(int)Esc] = e => {
 				if(!textView.ReadOnly) {
 					textView.ReadOnly = true;
-					textView.CanFocus = false;
 				} else {
 					return;
 				}
 				Done:
 				e.Handled = true;
 			},
+
+			['I'] = e => {
+				if(textView.ReadOnly) {
+					textView.ReadOnly = false;
+				} else {
+					e.Handled = false;
+				}
+			},
+
 		});
 		root.KeyDownD(new() {
 			[(int)CursorUp] = e => {
@@ -78,7 +100,7 @@ public class EditSession {
 
 			['S' | (uint)AltMask] = e => {
 				return;
-			}
+			},
 		});
 
 		var main = new Main();

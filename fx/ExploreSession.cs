@@ -1130,7 +1130,7 @@ public class ExploreSession {
 	bool GetItem (out PathItem p, out int index) {
 
 		var ind = pathList.SelectedItem;
-		if(!(ind > 0 && ind < cwdData.Count)) {
+		if(!(ind > -1 && ind < cwdData.Count)) {
 			p = null;
 			index = -1;
 			return false;

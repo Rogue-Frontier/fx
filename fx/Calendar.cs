@@ -48,7 +48,7 @@ namespace fx {
 				Width = Dim.Fill(),
 				Height = Dim.Fill(),
 			};
-			var evData = new ListMarker<Event>(new(), (e, i) => e.Summary ?? "<untitled>");
+			var evData = new ListMarker<Event>(new(), (e, i) => $"{DateOnly.FromDateTime(e.Start.DateTimeDateTimeOffset.Value.DateTime).ToString("yyyy/MM/dd")}: {e.Summary}" ?? "<untitled>");
 			RefreshEvents();
 			var evList = new ListView() {
 				AutoSize = false,
@@ -81,7 +81,7 @@ namespace fx {
 								});
 							}
 						});
-					} else  if(evData.list.ElementAtOrDefault(evList.SelectedItem) is { }e) {
+					} else if(evData.list.ElementAtOrDefault(evList.SelectedItem) is { } e) {
 						//service.Events.Delete(cal, e.RecurringEventId);
 						Task.Run(() => {
 							service.Events.Delete(cal, e.Id).Execute();
@@ -96,11 +96,11 @@ namespace fx {
 			});
 			var evView = new View() {
 				Title = "Details",
-				AutoSize=false,
+				AutoSize = false,
 				X = Pos.Right(evList),
 				Y = 0,
-				Width=Dim.Fill(),
-				Height= Dim.Fill(),
+				Width = Dim.Fill(),
+				Height = Dim.Fill(),
 				BorderStyle = LineStyle.Single,
 			};
 			var create = new Button() {
@@ -167,7 +167,6 @@ namespace fx {
 					];
 				x = 19;
 				y++;
-
 				View[] timeFieldDur = [
 					tf(ref x, 2, ()=>duration.Hours, hour => SetDur(duration.With(hour:hour)), ref setDur),
 					tl(ref x, 1, ':'),
@@ -175,59 +174,25 @@ namespace fx {
 					tl(ref x, 1, ':'),
 					tf(ref x, 2, ()=>duration.Seconds, second => SetDur(duration.With(second:second)), ref setDur),
 					];
-				void SetStart(DateTime d) {
+				void SetStart (DateTime d) {
 					start = d;
 					duration = end - start;
 					setStart();
 					setDur();
 				}
-				void SetEnd(DateTime d) {
+				void SetEnd (DateTime d) {
 					end = d;
 					duration = end - start;
 					setEnd();
 					setDur();
 				}
-				void SetDur(TimeSpan t) {
+				void SetDur (TimeSpan t) {
 					duration = t;
 					end = start + duration;
 					setDur();
 					setEnd();
 				}
-				View[] timeFieldsssss = [	
-					new TextField(){ Text = $"{start.Year}",
-						X = x, Y = y, Width = 4, Height = 1,AutoSize=false, TabStop=true, }.Constrain(4),
-					
-					new TextField(){ Text="/", TabStop=false,
-						X=x+=4, Y=y, Width=1, Height=1,AutoSize=false, },
-					
-					new TextField(){ Text = $"{start.Month}",
-						X = x+=1, Y = y, Width = 2, Height = 1,  AutoSize=false, TabStop=true, }.Constrain(2),
-					
-					new TextField(){ Text="/", TabStop=false,
-						X = x+=2, Y=y, Width=1, Height=1,AutoSize=false, },
-					
-					new TextField(){ Text = $"{start.Day}",
-						X = x+=1, Y = y, Width = 2, Height = 1, AutoSize=false, TabStop=true,}.Constrain(2),
-					
-					new TextField(){ Text="#", TabStop=false,
-						X = x+=2, Y=y, Width=1, Height=1,AutoSize = false,},
-
-					new TextField(){ Text = $"{start.Hour}",
-						X = x+=1, Y = y, Width = 2, Height = 1,AutoSize=false, TabStop=true, }.Constrain(2),
-					
-					new TextField(){ Text=":", TabStop=false,
-						X=x+=2,Y=y, Width=1, Height=1,AutoSize=false},
-					
-					new TextField(){ Text=$"{start.Minute}",
-						X=x+=1, Y=y, Width=2, Height=1,AutoSize = false, TabStop=true,},
-
-					new TextField(){ Text=":", TabStop=false,
-						X=x+=2,Y=y, Width=1, Height=1,AutoSize=false},
-
-					new TextField(){ Text=$"{start.Second}",
-						X=x+=1, Y=y, Width=2, Height=1,AutoSize = false, TabStop=true,},
-				];
-				TextField tf(ref int x, int width, Func<object> getValue, Action<int> input, ref Action changed) {
+				TextField tf (ref int x, int width, Func<object> getValue, Action<int> input, ref Action changed) {
 					var t = new TextField() {
 						Text = $"{getValue()}",
 						X = x,
@@ -280,7 +245,6 @@ namespace fx {
 					x += width;
 					return t;
 				}
-
 				y++;
 				var repeatLabel = new Label() {
 					AutoSize = false,
@@ -300,24 +264,20 @@ namespace fx {
 				var interval = 1;
 				Action intervalChanged = default;
 				var intervalField = tf(ref x, 2, () => interval, i => interval = i, ref intervalChanged);
-
-
 				x = 16;
-				Dictionary<string, CheckBox> days = new(){
-					["SU"] = new CheckBox(){ X = x, Y = y, Text = "Sunday"},
-					["MO"] = new CheckBox(){ X = x, Y = 1+y, Text = "Monday"},
-					["TU"] = new CheckBox(){ X = x, Y = 2+y, Text = "Tuesday"},
-					["WE"] = new CheckBox(){ X = x, Y = 3+y, Text = "Wednesday"},
-					["TH"] = new CheckBox(){ X = x, Y = 4+y, Text = "Thursday"},
-					["FR"] = new CheckBox(){ X = x, Y = 5+y, Text = "Friday"},
-					["SA"] = new CheckBox(){ X = x, Y = 6+y, Text = "Saturday"}
+				Dictionary<string, CheckBox> days = new() {
+					["SU"] = new CheckBox() { X = x, Y = y, Text = "Sunday" },
+					["MO"] = new CheckBox() { X = x, Y = 1 + y, Text = "Monday" },
+					["TU"] = new CheckBox() { X = x, Y = 2 + y, Text = "Tuesday" },
+					["WE"] = new CheckBox() { X = x, Y = 3 + y, Text = "Wednesday" },
+					["TH"] = new CheckBox() { X = x, Y = 4 + y, Text = "Thursday" },
+					["FR"] = new CheckBox() { X = x, Y = 5 + y, Text = "Friday" },
+					["SA"] = new CheckBox() { X = x, Y = 6 + y, Text = "Saturday" }
 				};
-
-
 				x = 32;
 				y = 0;
 				var nameLabel = new Label() {
-					AutoSize=false,
+					AutoSize = false,
 					X = x,
 					Y = y,
 					Width = 8,
@@ -348,14 +308,11 @@ namespace fx {
 					Height = 1,
 				};
 
-				SView.InitTree([d, timeLabel, ..timeFieldStart, ..timeFieldEnd, ..timeFieldDur, repeatLabel, repeatGroup, ..days.Values, nameLabel, nameField, descLabel, descField]);
 
-
+				SView.InitTree([d, timeLabel, .. timeFieldStart, .. timeFieldEnd, .. timeFieldDur, repeatLabel, repeatGroup, .. days.Values, nameLabel, nameField, descLabel, descField]);
 				var ev = new Event();
 				ev.Summary = nameField.Text;
 				ev.Description = descField.Text;
-
-
 				nameField.TextChanged += (a, e) => {
 					ev.Summary = e.NewValue;
 				};
@@ -363,8 +320,6 @@ namespace fx {
 					ev.Description = e.NewValue;
 				};
 				confirm.MouseClick += (a, e) => {
-
-
 					var _interval = interval > 1 ? $"INTERVAL={interval};" : "";
 					int? count = null;
 					int? until = null;
@@ -382,95 +337,131 @@ namespace fx {
 
 							break;
 						case 1: {//Daily
-							var _freq = $"FREQ=DAILY;";
-							rrule = $"RRULE:{_freq}{_interval}{_term}";
-						}	break;
+								var _freq = $"FREQ=DAILY;";
+								rrule = $"RRULE:{_freq}{_interval}{_term}";
+							}
+							break;
 						case 2: {//Weekly
-							var _freq = $"FREQ=WEEKLY;";
-							var _byday = string.Join(",", days
-								.Where(pair => pair.Value.Checked == true)
-								.Select(pair => pair.Key)) is { Length: > 0 } str ?
-									$"BYDAY={str};" :
-									"";
-							rrule = $"RRULE:{_freq}{_byday}{_interval}{_term}";
-						}	break;
+								var _freq = $"FREQ=WEEKLY;";
+								var _byday = string.Join(",", days
+									.Where(pair => pair.Value.Checked == true)
+									.Select(pair => pair.Key)) is { Length: > 0 } str ?
+										$"BYDAY={str};" :
+										"";
+								rrule = $"RRULE:{_freq}{_byday}{_interval}{_term}";
+							}
+							break;
 						case 3: {//Monthly
-							var _freq = $"FREQ=MONTHLY;";
-							rrule = $"RRULE{_freq}{_interval}{_term}";
-						}	break;
+								var _freq = $"FREQ=MONTHLY;";
+								rrule = $"RRULE{_freq}{_interval}{_term}";
+							}
+							break;
 						case 4: {
-							var _freq = $"FREQ=YEARLY;";
-							rrule = $"RRULE:{_freq}{_interval}{_term}";
-						}	break;
+								var _freq = $"FREQ=YEARLY;";
+								rrule = $"RRULE:{_freq}{_interval}{_term}";
+							}
+							break;
 					}
-
 					if(rrule.Any()) {
 						rrule = rrule[..(rrule.Length - 1)];
 						ev.Recurrence = [rrule];
 					}
-
 					if(!TimeZoneInfo.TryConvertWindowsIdToIanaId(TimeZoneInfo.Local.Id, out var id))
 						throw new Exception();
 					var tz = TimeZone.CurrentTimeZone;
 					ev.Start = new EventDateTime() {
 						DateTime = start,
-						TimeZone =id
-
+						TimeZone = id
 					};
 					ev.End = new EventDateTime() {
-						DateTime=end,
-						TimeZone=id
+						DateTime = end,
+						TimeZone = id
 					};
-
 					Event result = service.Events.Insert(ev, cal).ExecuteAsync().Result;
 					d.RequestStop();
 				};
 				cancel.MouseClick += (a, e) => d.RequestStop();
 				Application.Run(d);
 			};
+			{
+				var y = 0;
+				var nameLabel = new Label() {
+					Text = "Name",
+					AutoSize = false,
+					X = 0,
+					Y = y,
+					Width = 8,
+					Height = 1
+				};
+				var nameField = new Label() {
+					AutoSize=false,
+					X = Pos.Right(nameLabel),
+					Y = y,
+					Width = Dim.Fill(),
+					Height = 1
+				};
+				y++;
+				var locLabel = new Label() {
+					Text = "Loc",
+					AutoSize = false,
+					X = 0,
+					Y = y,
+					Width = 8,
+					Height = 1
+				};
+				var locField = new Label() {
+					AutoSize = false,
+					X = Pos.Right(locLabel),
+					Y = y,
+					Width = Dim.Fill(),
+					Height = 1
+				};
+				y++;
+				var descLabel = new Label() {
+					Text = "Desc",
+					AutoSize = false,
+					X = 0,
+					Y = y,
+					Width = 8,
+					Height = 1
+				};
+				var descField = new Label() {
+					AutoSize=false,
+					X = Pos.Right(descLabel),
+					Y = y,
+					Width = Dim.Fill(),
+					Height = 16,
+				};
+				y++;
+				
 
-			var nameLabel = new Label() {
-				Text = "Name",
-				AutoSize=false,
-				X = 0,
-				Y = 0,
-				Width = 8,
-				Height = 1
-			};
-			var name = new TextField() {
-				X = Pos.Right(nameLabel),
-				Y = 0,
-				Width = Dim.Fill(),
-				Height = 1
-			};
-			SView.InitTree([evView, nameLabel, name]);
+				evList.SelectedItemChanged += (a, e) => {
+					var item = evData.list[e.Item];
+					nameField.Text = item.Summary ?? "N/A";
+					descField.Text = item.Description ?? "N/A";
+					locField.Text = item.Location ?? "N/A";
+
+				};
+
+				SView.InitTree([evView, nameLabel, nameField, descLabel, descField, locLabel, locField]);
+			}
 			SView.InitTree([root, evList, evView, create]);
-
-
-
 			try {
-
 				//Console.WriteLine("Event created: %s\n", result.HtmlLink);
 				return;
 			} catch(GoogleApiException ex) {
 				Console.WriteLine(ex.ToString());
 			}
-
-
-
 			void RefreshEvents () {
 				evData.list.Clear();
 				var it = service.Events.List(cal).Execute().Items.Where(e =>
 					e.Summary != null //&& (e.Recurrence?.Any() == true || e.End.DateTimeDateTimeOffset > DateTime.Now)
-					);
+					).OrderBy(e => e.Start.DateTimeDateTimeOffset.Value.DateTime);
 				evData.list.AddRange(it);
 			}
 		}
-
 	}
 }
-
-
 public static class SField {
 	public static TimeSpan With (this TimeSpan t, int? hour = null, int? minute = null, int? second = null) =>
 		new TimeSpan(hour ?? t.Hours, minute ?? t.Minutes, second ?? t.Seconds);
