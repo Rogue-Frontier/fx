@@ -42,17 +42,60 @@ using Google.Apis.Auth.OAuth2;
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
 
+
+Run:
+
+Application.Init();
+var main = new Main();
+void Save (object? a, EventArgs e) => main.ctx.Save();
+AppDomain.CurrentDomain.ProcessExit += Save;
+
+bool crash = false, restart = false;
 try {
-	Application.Init();
-	var main = new Main();
-	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
-		main.ctx.Save();
-	};
 	Application.Top.Add(main.root);
-	Application.Run();
+	Application.Run();	
+} catch (Exception e){
+	main.ctx.Save();
+	AppDomain.CurrentDomain.ProcessExit -= Save;
+	Application.Shutdown();
+
+	Console.Clear();
+	Console.WriteLine(e.Message);
+	Console.WriteLine(e.StackTrace);
+
+	crash = true;
+
+	/*
+	var s = new CancellationTokenSource();
+	new Task(() => {
+		Console.ReadLine();
+		restart = true;
+	}, s.Token).Start();
+
+	Thread.Sleep(5000);
+	s.Cancel();
+	if(restart) goto Run;
+	*/
+
+	Console.ReadLine();
+	goto Run;
+	
+	throw;
 } finally {
+	/*
+	if(crash) {
+		Console.WriteLine("Restart? (Y/N)");
+		if(Console.Read() == 'Y') {
+			restart = true;
+		}
+	}
+	if(!restart) {
+		Environment.Exit(0);
+	}
+	*/
 	Application.Shutdown();
 }
+goto Run;
 public class Main {
 	public Ctx ctx;
 	public View[] root;
@@ -140,7 +183,6 @@ public class Main {
 			Width = Dim.Fill(),
 			Height = Dim.Fill(3),
 		});
-		var exploreSession = new ExploreSession(this, Environment.CurrentDirectory);
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
 		var termView = new Lazy<View>(() => {
@@ -159,8 +201,8 @@ public class Main {
 		}).Value;
 		foreach(var (name, view) in new Dictionary<string, View>() {
 			["Home"] = homeSession.root,
-			["Expl"] = exploreSession.root,
-			["Cal"] = new Calendar(this).root,
+			//["Expl"] = new ExploreSession(this, Environment.CurrentDirectory).root,
+			//["Cal"] = new Calendar(this).root,
 		}) {
 			folder.AddTab(name, view, true);
 		}
@@ -183,12 +225,11 @@ public class Main {
 		InitTree([
 			[window, folder.root, termBar]
 		]);
-
 		IEnumerable<MenuBarItem> GetBarItems () {
 			yield return new MenuBarItem("_Fx", [
 				new MenuItem("Reload", "", ctx.ResetCommands)
 			]) { CanExecute = () => true };
-			yield return new MenuBarItem("Tab_s", Array.Empty<MenuBarItem>()) { CanExecute = () => true };
+			yield return new MenuBarItem("_Switch", Array.Empty<MenuBarItem>()) { CanExecute = () => true };
 		}
 		var windowMenuBar = new MenuBar() {
 			Visible = true,
@@ -206,7 +247,6 @@ public class Main {
 	}
 }
 //public record Session(Fx state, Ctx temp);
-
 public record OAuth (string email, string clientId, string clientSecret) {
 	public OAuth () : this(null, null, null) { }
 	[YamlIgnore]
@@ -222,8 +262,6 @@ public record Fx {
 	public HashSet<string>	locked =	new();
 	public List<string>		pins =	new();
 	public string			workroot =	null; //move to ExplorerSession
-
-
 	//public List<OAuth> accounts;
 	public List<Library>	libraryData = new();
 	public Fx () { }
@@ -231,7 +269,6 @@ public record Fx {
 	public void Load (Ctx ctx) {
 		if(File.Exists(SAVE_PATH)) {
 			try {
-
 				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE));
 				foreach(var f in GetType().GetFields( BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)) {
 					f.Copy(this, o);
@@ -266,7 +303,6 @@ public record Ctx {
 		File.WriteAllText(Fx.SAVE_PATH, se.Serialize(fx).Replace(USER_PROFILE, USER_PROFILE_MASK));
 	}
 	public void ResetCommands () {
-
 		var dir = Command.EXECUTABLES_DIR;
 		Directory.CreateDirectory(dir);
 		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{dir}.yaml"));
@@ -275,22 +311,18 @@ public record Ctx {
 		}
 		Commands = de.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
 	}
-	public IEnumerable<MenuItem> GetCommands (PathItem item) =>
-		Commands
-			.Where(c => c.Accept(item.path))
-			.Select(c => new MenuItem(c.name, "", () => ExploreSession.RunCmd(c.GetCmd(item.path))));
-
+	public IEnumerable<MenuItem> GetCommands (PathItem item) => Commands
+		.Where(c => c.Accept(item.path))
+		.Select(c => new MenuItem(c.name, "", () => ExploreSession.RunCmd(c.GetCmd(item.path))));
 	public delegate IEnumerable<IProp> GetProps (string path);
-	public PathItem GetPathItem(string path, GetProps GetProps) =>
-		pathData[path] =
-			pathData.TryGetValue(path, out var item) ?
-				new PathItem(item.local, item.path, new(GetProps(path))) :
-				new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
-	public PathItem GetCachedPathItem (string path, GetProps GetProps) =>
-		pathData[path] =
-			pathData.TryGetValue(path, out var item) ?
-				item :
-				new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
+	public PathItem GetPathItem(string path, GetProps GetProps) => pathData[path] =
+		pathData.TryGetValue(path, out var item) ?
+			new PathItem(item.local, item.path, new(GetProps(path))) :
+			new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
+	public PathItem GetCachedPathItem (string path, GetProps GetProps) => pathData[path] =
+		pathData.TryGetValue(path, out var item) ?
+			item :
+			new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
 	public record Git {
 		public string root => repo.GetRoot();
 		public Repository repo { get; }

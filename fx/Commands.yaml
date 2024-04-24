@@ -1,4 +1,15 @@
 ---
+- name: Edit in LibreOffice Draw
+  fmt: ldraw {0}
+  targetAny:
+    file:
+      - ext: pdf
+- name: Edit in LibreOffice Writer
+  fmt: ldoc {0}
+  targetAny:
+    file:
+      - ext: docx
+
 - name: Open GitHub
   fmt: cd {0} & gh repo view --web
   targetAny:
@@ -54,3 +65,13 @@
   targetAny:
     file:
       - ext: png
+- name: Edit in ASECII
+  fmt: C:\Users\alexm\source\repos\ASECII\ASECII\bin\Debug\net9.0\ASECII.exe {0}
+  targetAny:
+    file:
+      - ext: asc
+- name: Edit in Godot
+  fmt: godot {0}
+  targetAny:
+    file:
+      - ext: godot

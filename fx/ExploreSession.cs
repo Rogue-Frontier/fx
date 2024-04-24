@@ -39,7 +39,7 @@ public class ExploreSession {
 	public string cwd = Environment.CurrentDirectory;
 	public LinkedList<string> cwdPrev = new();
 	public LinkedList<string> cwdNext = new();
-	private List<PathItem> cwdData = new();
+	private ListMarker<PathItem> cwdData;
 	Dictionary<string, GitItem> gitMap = new();
 	private List<GitItem> gitData = new();
 	private Label goPrev, goNext, goLeft;
@@ -54,12 +54,14 @@ public class ExploreSession {
 	public ExploreSession (Main main, string initCwd) {
 		this.main = main;
 		this.cwd = initCwd;
+		cwdData = new(new(), (p, i) => p.local);
 		var favData = new List<PathItem>();
 		var procData = new List<WindowItem>();
 
 		main.TermEnter += OnTermEnter;
 
 		root = new View() {
+			Title = "Root",
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -69,6 +71,7 @@ public class ExploreSession {
 		goNext = new Label() { Title= "[--->]", X = 7, TabStop = false };
 		goLeft = new Label() { Title= "[/../]",  X = 13, TabStop = false };
 		addressBar = new TextField() {
+			Title = "Address",
 			X = Pos.Percent(25) + 1,
 			Y = 0,
 			Width = Dim.Fill() - 1,
@@ -85,6 +88,7 @@ public class ExploreSession {
 			Height = Dim.Percent(50) - 1,
 		};
 		var freqList = new ListView() {
+			Title = "Recents List",
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -102,18 +106,21 @@ public class ExploreSession {
 			};
 			var clipTab = new Lazy<View>(() => {
 				var view = new TabView() {
+					Title = "Clipboard",
 					X = 0,
 					Y = 0,
 					Width = Dim.Fill(),
 					Height = Dim.Fill()
 				};
 				var clipCutList = new ListView() {
+					Title = "Cut",
 					X = 0,
 					Y = 0,
 					Width = Dim.Fill(),
 					Height = Dim.Fill()
 				};
 				var clipHistList = new ListView() {
+					Title = "History",
 					X = 0,
 					Y = 0,
 					Width = Dim.Fill(),
@@ -134,13 +141,16 @@ public class ExploreSession {
 			Width = Dim.Percent(50),
 			Height = 28,
 		};
+
 		pathList = new ListView() {
+			Title = "Directory Items",
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			AllowsMultipleSelection = true,
 			AllowsMarking = true,
+			Source = cwdData
 		};
 		var properties = new FrameView() {
 			Title = "Properties",
@@ -159,6 +169,7 @@ public class ExploreSession {
 			Height = Dim.Percent(50) - 1,
 		};
 		var procList = new ListView() {
+			Title = "Process List",
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -173,7 +184,7 @@ public class ExploreSession {
 			}
 		};
 		var repoPane = new View() {
-			Title = "Repo",
+			Title = "Repository",
 			BorderStyle = LineStyle.Single,
 			X = Pos.Percent(75),
 			Y = Pos.Percent(50),
@@ -181,6 +192,7 @@ public class ExploreSession {
 			Height = Dim.Percent(50),
 		};
 		repoList = new ListView() {
+			Title = "Repository Items",
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -250,12 +262,7 @@ public class ExploreSession {
 					if(i >= cwdData.Count)
 						return;
 					pathList.SelectedItem = i;
-					var c = ShowContext(cwdData[i], e.MouseEvent.Y, e.MouseEvent.X);
-					/*
-					c.MenuItems.Children.ToList().ForEach(it => it.Action += () => {
-						int i = 0;
-					});
-					*/
+					var c = ShowContext(cwdData.list[i], e.MouseEvent.Y, e.MouseEvent.X);
 					c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
 						if(prev == -1) {
 							return;
@@ -364,7 +371,7 @@ public class ExploreSession {
 							pair.index > index && StartsWith(pair);
 						bool StartsWith ((int index, PathItem item) pair) =>
 							pair.item.local.StartsWith(c, StringComparison.CurrentCultureIgnoreCase);
-						var pairs = cwdData.Index();
+						var pairs = cwdData.list.Index();
 						var dest = pairs.FirstOrDefault(P, pairs.FirstOrDefault(StartsWith, (-1, null)));
 						if(dest.Index == -1) return;
 						pathList.SelectedItem = dest.Index;
@@ -372,11 +379,15 @@ public class ExploreSession {
 					}
 					,
 					>= 'A' and <= 'Z' => () => {
-						var index = e.AsRune.Value - 'A' + pathList.TopItem;
+						var index = (int)e.KeyCode - 'A' + pathList.TopItem;
 						if(pathList.SelectedItem == index) {
 							GoItem();
 							return;
 						}
+						if(index >= pathList.Source.Count) {
+							return;
+						}
+
 						pathList.SelectedItem = index;
 						pathList.OnSelectedChanged();
 						pathList.SetNeedsDisplay();
@@ -462,7 +473,7 @@ public class ExploreSession {
 				if(marked.Except([selected]).Any()) {
 					bar = new MenuBarItem([
 						bar,
-						new MenuBarItem("Marked Items", children: new MenuItem[0])
+						new MenuBarItem("Marked Items", [..GetGroupActions(main, marked)])
 					]);
 				}
 				var c = new ContextMenu() {
@@ -501,7 +512,7 @@ public class ExploreSession {
 				if(!(ind > -1 && ind < cwdData.Count)) {
 					return;
 				}
-				Go(cwdData[pathList.SelectedItem]);
+				Go(cwdData.list[pathList.SelectedItem]);
 				void Go (PathItem i) {
 					if(i.propSet.Contains(IS_LOCKED)) {
 						return;
@@ -552,17 +563,16 @@ public class ExploreSession {
 		}
 		var cmd = e.text;
 		//Replace {0} with the first marked path
-		string[] args = cwdData.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
+		string[] args = cwdData.list.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
 		if(args.Any()) {
 			cmd = string.Format(cmd, args);
 		} else {
 			//cmd = string.Format(cmd, cwdData[pathList.SelectedItem].local);
-			cmd = string.Format(cmd, [..cwdData.Select(p => p.local)]);
+			cmd = string.Format(cmd, [..cwdData.list.Select(p => p.local)]);
 		}
 
 		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
 			if(!GoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
-
 			}
 			goto Handled;
 		}
@@ -582,7 +592,7 @@ public class ExploreSession {
 	public IEnumerable<int> GetMarkedIndex () =>
 		Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
 	public IEnumerable<PathItem> GetMarkedItems () =>
-		GetMarkedIndex().Select(i => cwdData[i]);
+		GetMarkedIndex().Select(i => cwdData.list[i]);
 
 	public static void ShowProperties (PathItem item) {
 		var d = new Dialog() {
@@ -610,11 +620,11 @@ public class ExploreSession {
 	/// <returns></returns>
 	public static Process RunCmd (string cmd) {
 		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Executables")}'";
-		var cmdArgs = @$"/c {cmd}";
+		var cmdArgs = @$"/c {cmd} & pause";
 		var pi = new ProcessStartInfo("cmd.exe") {
 			Arguments = $"{cmdArgs}",
 			UseShellExecute = true,
-			WindowStyle = ProcessWindowStyle.Hidden,
+			//WindowStyle = ProcessWindowStyle.Hidden,
 		};
 		return Process.Start(pi);
 	}
@@ -636,7 +646,6 @@ public class ExploreSession {
 			}
 		} else if(File.Exists(path)) {
 			yield return IS_FILE;
-
 			if(path.EndsWith(".sln")) {
 				yield return IS_SOLUTION;
 			}
@@ -644,7 +653,7 @@ public class ExploreSession {
 				// WshShellClass shell = new WshShellClass();
 				WshShell shell = new WshShell(); //Create a new WshShell Interface
 				IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
-				yield return IS_LINK_TO.Make<string>(link.TargetPath);
+				yield return IS_LINK_TO.Make(link.TargetPath);
 			}
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;
@@ -679,17 +688,17 @@ public class ExploreSession {
 		//yield return new MenuItem(item.local, null, null, () => false);
 		//yield return new MenuItem("----", null, null, () => false);
 
-		var action_command = new MenuItem("Command", null, () => {
-			RequestName("Command", cmd => {
-				cmd = string.Format(cmd, item.path);
-				ExploreSession.RunCmd(cmd);
-				return true;
+		var RunCommand =
+			new MenuItem("Command", null, () => {
+				RequestName("Command", cmd => {
+					cmd = string.Format(cmd, item.path);
+					RunCmd(cmd);
+					return true;
+				});
 			});
-		});
-
 		MenuItem UseSystemTerminal (string path) =>
 			new MenuItem("Use system terminal", null, () => {
-				ExploreSession.StartCmd(path);
+				StartCmd(path);
 			});
 
 		if(item.HasProp(IS_DIRECTORY)) {
@@ -706,7 +715,7 @@ public class ExploreSession {
 			}) {
 				Children = [
 					UseSystemTerminal(item.path),
-					action_command
+					RunCommand
 				]
 			};
 		} else if(item.HasProp(IS_FILE)) {
@@ -716,16 +725,6 @@ public class ExploreSession {
 		}
 
 		if(Path.GetDirectoryName(item.path) is { } par) {
-
-			yield return new MenuBarItem("Term parent", null, () => {
-				var session = new TermSession(main, item.path);
-				main.folder.AddTab($"Term {par}", session.root, true, main.root.FirstOrDefault()?.Focused);
-			}) {
-				Children = [
-					UseSystemTerminal(item.path),
-					action_command
-				]
-			};
 			yield return new MenuBarItem("Explore parent", null, () => {
 				main.folder.AddTab("Expl", new ExploreSession(main, par).root, true);
 			}) {
@@ -733,6 +732,16 @@ public class ExploreSession {
 					new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{par}"""))
 				]
 			};
+			yield return new MenuBarItem("Term parent", null, () => {
+				var session = new TermSession(main, item.path);
+				main.folder.AddTab($"Term {par}", session.root, true, main.root.FirstOrDefault()?.Focused);
+			}) {
+				Children = [
+					UseSystemTerminal(item.path),
+					RunCommand
+				]
+			};
+			
 		}
 
 		yield return new MenuBarItem("Find", null, () => {
@@ -813,7 +822,7 @@ public class ExploreSession {
 					File.Create(f);
 					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
-						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
 					}
 					return true;
 				}
@@ -824,7 +833,7 @@ public class ExploreSession {
 					Directory.CreateDirectory(f);
 					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
-						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
 					}
 					return true;
 				}
@@ -847,7 +856,7 @@ public class ExploreSession {
 					File.Copy(item.path, f);
 					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
-						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
 					}
 					return true;
 				}
@@ -858,7 +867,7 @@ public class ExploreSession {
 					File.Move(item.path, f);
 					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
-						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
 					}
 					return true;
 				}
@@ -896,7 +905,7 @@ public class ExploreSession {
 					File.Copy(item.path, f);
 					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
-						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
 					}
 					return true;
 				}
@@ -907,7 +916,7 @@ public class ExploreSession {
 					File.Move(item.path, f);
 					if(item.path.StartsWith(cwd)) {
 						RefreshCwd();
-						pathList.SelectedItem = cwdData.FindIndex(p => p.path == f);
+						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
 					}
 					return true;
 				}
@@ -923,6 +932,36 @@ public class ExploreSession {
 		.. GetInstanceActions(main, item),
 		.. ctx.GetCommands(item),
 		.. GetStaticActions (main, item)];
+
+	public IEnumerable<MenuItem> GetGroupActions (Main main, PathItem[] items) =>
+		[new MenuItem("Cancel", "", () => {
+			return;
+		}),
+		.. GetStaticGroupActions(main, items)
+	];
+	public IEnumerable<MenuItem> GetStaticGroupActions(Main main, PathItem[] items) {
+		yield return new MenuItem("Compress", null, () => {
+			RequestName("Archive Name", name => {
+				using var f = File.Create(name);
+				using var zip = new ZipArchive(f, ZipArchiveMode.Create);
+				var par = Directory.GetParent(items[0].path).FullName;
+				foreach(var item in items) {
+					if(item.dir) {
+						var subitems =
+							from path in Directory.GetFileSystemEntries(item.path, "*", SearchOption.AllDirectories)
+							where File.Exists(path)
+							select path;
+						foreach(var sub in subitems) {
+							zip.CreateEntryFromFile(sub, sub.Replace(par, ""));
+						}
+					} else {
+						zip.CreateEntryFromFile(item.path, item.path.Replace(par, ""));
+					}
+				}
+				return true;
+			}, $"{items[0].path}/{items[0].local}.zip");
+		});
+	}
 
 	public static bool RequestConfirm (string title) {
 		var confirm = new Button() {
@@ -1024,10 +1063,8 @@ public class ExploreSession {
 	}
 	void RefreshListing (string s) {
 		try {
-			pathList.SetSource(cwdData = new List<PathItem>([
-				..Directory.GetDirectories(s).Select(GetPathItem),
-				..Directory.GetFiles(s).Select(GetPathItem)
-			]));
+			cwdData.list.Clear();
+			cwdData.list.AddRange(Directory.GetDirectories(s).Select(GetPathItem).Concat(Directory.GetFiles(s).Select(GetPathItem)).OrderByDescending(p => File.GetLastWriteTimeUtc(p.path)));
 		}catch(UnauthorizedAccessException e) {
 		}
 	}
@@ -1066,8 +1103,7 @@ public class ExploreSession {
 		//Anonymize
 		addressBar.Text = showCwd;
 		Console.Title = showCwd;
-
-		pathList.SelectedItem = Math.Min(Math.Max(0, cwdData.Count - 1), lastIndex.GetValueOrDefault(cwd, 0));
+		pathList.SelectedItem = Math.Min(Math.Max(0, pathList.Source.Count - 1), lastIndex.GetValueOrDefault(cwd, 0));
 		pathList.SetNeedsDisplay();
 	}
 	void RefreshCwd () {
@@ -1099,7 +1135,7 @@ public class ExploreSession {
 			cwdPrev.AddLast(cwd);
 			SetCwd(dest);
 			RefreshPads();
-			if(cwdData.FindIndex(p => p.local == f) is {}ind and not -1) {
+			if(cwdData.list.FindIndex(p => p.local == f) is {}ind and not -1) {
 				pathList.SelectedItem = ind;
 			}
 			return true;
@@ -1124,7 +1160,7 @@ public class ExploreSession {
 			p = null;
 			return false;
 		}
-		p = cwdData[pathList.SelectedItem];
+		p = cwdData.list[pathList.SelectedItem];
 		return true;
 	}
 	bool GetItem (out PathItem p, out int index) {
@@ -1135,7 +1171,7 @@ public class ExploreSession {
 			index = -1;
 			return false;
 		}
-		p = cwdData[index = ind];
+		p = cwdData.list[index = ind];
 		return true;
 	}
 	public static void Preview (string title, string content) {

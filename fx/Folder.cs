@@ -186,27 +186,30 @@ public record Tab {
 		var head = folder.head;
 		leftBar = head.Subviews.Last();
 		tab = new Lazy<View>(() => {
+			bool home = name == "Home";
 			var root = new Label() {
 				AutoSize = false,
 				Title = name,
 				X = Pos.Right(leftBar),
 				Y = 0,
 				Height = 1,
-				Width = name.Length + 3,
+				Width = name.Length + (home ? 0 : 3),
 			};
 			root.MouseEvD(new() {
 				[(int)Button1Pressed] = _ => folder.FocusTab(this)
 			});
 
-			var kill = new Label() {
-				Title = "[X]",
-				X = Pos.AnchorEnd(3),
-				Y = 0,
-			};
-			kill.MouseEvD(new() {
-				[(int)Button1Pressed] = _ => folder.RemoveTab(view, out var _)
-			});
-			InitTree([[root, kill]]);
+			if(!home) {
+				var kill = new Label() {
+					Title = "[X]",
+					X = Pos.AnchorEnd(3),
+					Y = 0,
+				};
+				kill.MouseEvD(new() {
+					[(int)Button1Pressed] = _ => folder.RemoveTab(view, out var _)
+				});
+				InitTree([[root, kill]]);
+			}
 			return root;
 		}).Value;
 

@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using Terminal.Gui;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
+using GDShrapt.Reader;
 namespace fx;
 public class HomeSession {
 	public View root;
@@ -42,19 +43,20 @@ public class HomeSession {
 			}
 		};
 		//Pinned folders, pinned files
-		var pinsList = new ListView() {
+		var pinData = new ListMarker<string>(main.ctx.fx.pins, (s, i) => s);
+		var pinList = new ListView() {
 			Title = "Pinned",
 			BorderStyle = LineStyle.Single,
 			X = Pos.Right(libraryTree),
 			Y = 0,
 			Width = w,
 			Height = FILL,
-			Source = new ListWrapper(main.ctx.fx.pins)
+			Source = pinData
 		};
 		var recentList = new ListView() {
 			Title = "Recent",
 			BorderStyle = LineStyle.Single,
-			X = Pos.Right(pinsList),
+			X = Pos.Right(pinList),
 			Y =0,
 			Width = w,
 			Height = FILL,
@@ -110,8 +112,71 @@ public class HomeSession {
 				e.Handled = true;
 			}
 		});
+
+		pinList.KeyDownD(new() {
+
+				['"'] = k => {
+					var ind = pinList.SelectedItem;
+					if(pinData.list.ElementAtOrDefault(ind) is not { }path) return;
+					ExploreSession.Preview($"Preview: {path}", File.ReadAllText(path));
+				}
+				,
+				['?'] = k => {
+					var ind = pinList.SelectedItem;
+					if(pinData.list.ElementAtOrDefault(ind) is not { } path) return;
+					ExploreSession.ShowProperties(ctx.GetPathItem(path, ExploreSession.GetStaticProps));
+				}
+				,
+				['/'] = k => {
+					var ind = pinList.SelectedItem;
+					if(pinData.list.ElementAtOrDefault(ind) is not { } path) return;
+					var c = SView.ShowContext(pinList, [.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(path, ExploreSession.GetStaticProps))], ind - pinList.TopItem + 2, 2);
+				}
+		});
+
+
+		/*
+
+					'"' => () => {
+						if(!GetItem(out var p) || p.dir) return;
+						Preview($"Preview: {p.path}", File.ReadAllText(p.path));
+					}
+					,
+					'?' => () => {
+						if(!GetItem(out var p)) return;
+						ShowProperties(p);
+					}
+					,
+					'/' => () => {
+						if(!GetItem(out var p, out var ind)) return;
+						var c = ShowContext(p, ind - pathList.TopItem + 2, 2);
+					}
+		*/
+		pinList.MouseEvD(new() {
+			[(int)Button3Released] = e => {
+				var prev = pinList.SelectedItem;
+				var i = pinList.TopItem + e.MouseEvent.Y;
+				if(i >= pinData.Count) {
+
+					//Show same menu as .
+					return;
+				}
+				pinList.SelectedItem = i;
+				var c = SView.ShowContext(libraryTree, [.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(pinData.list[i], ExploreSession.GetStaticProps))], e.MouseEvent.Y, e.MouseEvent.ScreenPosition.X);
+				c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
+					if(prev == -1) {
+						return;
+					}
+					pinList.SelectedItem = prev;
+				};
+				e.Handled = true;
+			}
+		});
+
+
+
 		SView.InitTree(
-			[[root, libraryTree, pinsList, recentList, repoList]]
+			[[root, libraryTree, pinList, recentList, repoList]]
 			);
 		//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
 		IEnumerable<MenuItem> GetSpecificActions (int row, ILibraryTree obj) {
