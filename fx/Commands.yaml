@@ -70,8 +70,25 @@
   targetAny:
     file:
       - ext: asc
+- name: Build Firefox extension
+  cd: true
+  fmt: '"C:\Program Files\nodejs\nodevars.bat" & web-ext build --overwrite-dest'
+  targetAny:
+    dir:
+      - file:
+          - name: manifest.firefox.json
 - name: Edit in Godot
   fmt: godot {0}
   targetAny:
     file:
       - ext: godot
+- name: Compile in g++
+  fmt: wsl --exec g++ {0} -o {0}.out
+  targetAny:
+    file:
+      - ext: cpp
+- name: Run in WSL
+  fmt: wsl --exec {0}
+  targetAny:
+    file:
+      - ext: out

@@ -400,7 +400,7 @@ public class FindSession {
 		);
 
 		yield return new MenuItem("Edit", "", () => {
-			main.folder.AddTab($"Edit {l.path}", new EditSession(l.path, l.row, l.col).root, true, root.Focused);
+			main.folder.AddTab($"Edit {l.path}", new EditSession(main, l.path, l.row, l.col).root, true, root.Focused);
 		});
 
 		yield return new MenuItem("Copy Group", "", () => { });
@@ -421,7 +421,37 @@ public class FindSession {
 		tree.TreeBuilder = tf;
 
 		var root = GetRoot();
-		tf.CreateTree(root);
+
+		var dialog = new Dialog() {
+			Title = $"Finding in {root}"
+		};
+
+		var tv = new TextView() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill()
+		};
+		dialog.Add(tv);
+
+		tf.FileScanned += f => {
+			tv.Text += $"{f}\n";
+		};
+
+		var c = new CancellationTokenSource();
+		var cancel = new Button() { Title = "Cancel", };
+		dialog.AddButton(cancel);
+		cancel.MouseClick += (a, e) => {
+			dialog.RequestStop();
+			c.Cancel();
+		};
+
+		Task.Run(() => {
+			tf.CreateTree(root);
+			dialog.RequestStop();
+		}, c.Token);
+
+		Application.Run(dialog);
 
 		var i = IFind.New(root);
 		if(i is FindDir d) {
@@ -466,8 +496,9 @@ public record FindFilter (Regex filePattern, Regex linePattern, string replace) 
 		LeafType.Line;
 }
 public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
-	ConcurrentDictionary<string, string[]> node = new();
+	ConcurrentDictionary<string, IFind[]> node = new();
 	ConcurrentDictionary<string, FindLine[]> line = new();
+
 	public bool SupportsCanExpand => true;
 	public bool CanExpand (IFind i) => i switch {
 		FindDir d => node.GetOrAdd(d.path, []).Any(),
@@ -475,11 +506,12 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 		FindLine => false
 	};
 	public IEnumerable<IFind> GetChildren (IFind i) => i switch {
-		FindDir d => node[d.path]
-		.Select<string, IFind>(path => Directory.Exists(path) ? new FindDir(path) : new FindFile(path)),
+		FindDir d => node[d.path],
 		FindFile f => line[f.path],
 		FindLine => []
 	};
+
+	public Action<string> FileScanned;
 	public void CreateTree(string root) {
 		if(filter.LeafType == LeafType.Dir) {
 			int i = 0;
@@ -490,7 +522,10 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 			}
 			void Traverse (string dir) {
 				var sub = Directory.GetDirectories(dir);
-				node[dir] = sub;
+
+				var next = sub.Select(d => new FindDir(d));
+				node.AddOrUpdate(dir, _ => [.. next], (key, val) => [.. val, .. next]);
+				//node[dir] = [..next];
 				foreach(var d in sub) {
 					q.Add(d);
 				}
@@ -532,6 +567,7 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 					.Where(p => p.match.Success)
 					.Select(p => new FindLine(f, p.row, p.match.Index, p.line, p.match.Value))
 					];
+				FileScanned?.Invoke(f);
 				if(l.Length == 0) {
 					continue;
 				}
@@ -542,23 +578,26 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 		}
 		void MakeNodes(IEnumerable<string> files) {
 			//Filter out files before making the tree
-			ConcurrentDictionary<string, List<string>> subfiles = new(files
+			ConcurrentDictionary<string, HashSet<string>> subfiles = new(files
 				.GroupBy(Path.GetDirectoryName)
-				.ToDictionary(g => g.Key, g => new List<string>(g)));
+				.ToDictionary(g => g.Key, g => new HashSet<string>(g)));
 
 			var activeSubdir = subfiles.Keys;
 			while(activeSubdir.Any()) {
 				var dict = activeSubdir
 					.GroupBy(Path.GetDirectoryName)
 					.Where(g => g.Key != null)
-					.ToDictionary(g => g.Key, g => new List<string>(g));
+					.ToDictionary(g => g.Key, g => g.ToArray());
 				foreach(var (dir, subdir) in dict) {
-					subfiles.GetOrAdd(dir, []).AddRange(subdir);
+					subfiles.GetOrAdd(dir, []).UnionWith(subdir);
 				}
 				activeSubdir = dict.Keys;
 			}
 			foreach(var (dir, file) in subfiles) {
-				node[dir] = [.. file];
+				var next = file.Select(f => new FindFile(f));
+				//node[dir] = [.. next];
+				node.AddOrUpdate(dir, _ => [.. next], (key, val) => [.. val, .. next]);
+
 			}
 		}
 

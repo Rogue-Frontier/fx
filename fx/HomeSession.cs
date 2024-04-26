@@ -113,6 +113,9 @@ public class HomeSession {
 			}
 		});
 
+		pinList.OpenSelectedItem += (a, e) => {
+			main.folder.AddTab("Expl", new ExploreSession(main, pinData.list[pinList.SelectedItem]).root, true);
+		};
 		pinList.KeyDownD(new() {
 
 				['"'] = k => {

@@ -24,13 +24,18 @@ public static class Props {
 		IS_UNSTAGED = new Prop("gitUnstagedChanges", "- Unstaged Changes"),
 		IS_SOLUTION = new Prop("visualStudioSolution", "Visual Studio Solution"),
 		IS_REPOSITORY = new Prop("gitRepositoryRoot", "Git Repository"),
-		IS_ZIP = new Prop("zipArchive", "Zip Archive");
+		IS_ZIP = new Prop("zipArchive", "Zip Archive"),
+		
+		IS_PYTHON = new Prop("sourcePython", "Python Source"),
+		IS_BATCH  = new Prop("sourceBatch", "Batch Source"),
+		IS_BASH = new Prop("sourceBash", "Bash Source");
+		
 	public static IPropGen
-		IN_REPOSITORY = new PropGen<RepoItem>("gitRepositoryItem", pair => $"In Repository: {pair.root}"),
-		IS_LINK_TO = new PropGen<string>("link", dest => $"Link To: {dest}"),
-		IN_LIBRARY = new PropGen<Library>("libraryItem", library => $"In Library: {library.name}"),
-		IN_SOLUTION = new PropGen<string>("solutionItem", solutionPath => $"In Solution: {solutionPath}"),
-		IN_ZIP = new PropGen<string>("zipItem", zipRoot => $"In Zip: {zipRoot}");
+		IN_REPOSITORY = new PropGen<RepoItem>("gitRepositoryItem",	pair => $"In Repository: {pair.root}"),
+		IS_LINK_TO = new PropGen<string>("link",					dest => $"Link To: {dest}"),
+		IN_LIBRARY = new PropGen<Library>("libraryItem",			library => $"In Library: {library.name}"),
+		IN_SOLUTION = new PropGen<string>("solutionItem",			slnPath => $"In Solution: {slnPath}"),
+		IN_ZIP = new PropGen<string>("zipItem",						zipRoot =>	$"In Zip: {zipRoot}");
 	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
 	public static string GetRepoLocal (this Repository repo, string path) => path.Replace(repo.GetRoot() + Path.DirectorySeparatorChar, null);
 	public static string GetRepoLocal (string root, string path) => path.Replace(root + Path.DirectorySeparatorChar, null);

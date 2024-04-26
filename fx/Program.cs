@@ -47,16 +47,15 @@ Run:
 
 Application.Init();
 var main = new Main();
-void Save (object? a, EventArgs e) => main.ctx.Save();
-AppDomain.CurrentDomain.ProcessExit += Save;
-
 bool crash = false, restart = false;
 try {
+	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
+		main.ctx.Save();
+	};
 	Application.Top.Add(main.root);
 	Application.Run();	
 } catch (Exception e){
 	main.ctx.Save();
-	AppDomain.CurrentDomain.ProcessExit -= Save;
 	Application.Shutdown();
 
 	Console.Clear();
@@ -93,6 +92,7 @@ try {
 		Environment.Exit(0);
 	}
 	*/
+	main.ctx.Save();
 	Application.Shutdown();
 }
 goto Run;
@@ -185,6 +185,7 @@ public class Main {
 		});
 		//https://github.com/HicServices/RDMP/blob/a57076c0d3995e687d15558d21071299b6fb074d/Tools/rdmp/CommandLine/Gui/Windows/RunnerWindows/RunEngineWindow.cs#L176
 		//https://github.com/gui-cs/Terminal.Gui/issues/1404
+		/*
 		var termView = new Lazy<View>(() => {
 			var view = new View();
 			var text = new TextView() {
@@ -199,6 +200,7 @@ public class Main {
 			InitTree([view, text]);
 			return view;
 		}).Value;
+		*/
 		foreach(var (name, view) in new Dictionary<string, View>() {
 			["Home"] = homeSession.root,
 			//["Expl"] = new ExploreSession(this, Environment.CurrentDirectory).root,
@@ -309,11 +311,13 @@ public record Ctx {
 		foreach((var name, var path) in executables) {
 			File.WriteAllText($"{dir}/{name}", path);
 		}
-		Commands = de.Deserialize<Command[]>(File.ReadAllText("Commands.yaml"));
+		Commands = de.Deserialize<Command[]>(File.ReadAllText("D:/fx/fx/Commands.yaml"));
 	}
 	public IEnumerable<MenuItem> GetCommands (PathItem item) => Commands
 		.Where(c => c.Accept(item.path))
-		.Select(c => new MenuItem(c.name, "", () => ExploreSession.RunCmd(c.GetCmd(item.path))));
+		.Select(c => new MenuItem(c.name, "", () =>
+			ExploreSession.RunCmd(c.GetCmd(item.path), c.cd ? item.path : null)
+		));
 	public delegate IEnumerable<IProp> GetProps (string path);
 	public PathItem GetPathItem(string path, GetProps GetProps) => pathData[path] =
 		pathData.TryGetValue(path, out var item) ?

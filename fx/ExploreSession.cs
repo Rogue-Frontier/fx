@@ -50,6 +50,8 @@ public class ExploreSession {
 	private RepoPtr? git;
 	private string cwdRecall = null;
 
+	public string zipRoot;
+
 	private Main main;
 	public ExploreSession (Main main, string initCwd) {
 		this.main = main;
@@ -150,7 +152,8 @@ public class ExploreSession {
 			Height = Dim.Fill(),
 			AllowsMultipleSelection = true,
 			AllowsMarking = true,
-			Source = cwdData
+			Source = cwdData,
+			HasFocus = true,
 		};
 		var properties = new FrameView() {
 			Title = "Properties",
@@ -241,11 +244,10 @@ public class ExploreSession {
 			goLeft.MouseEvD(new() {
 				[(int)Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
-					MenuItems = new([.. Up().Select(p => new MenuItem(p, "", () => GoPath(p)))])
+					MenuItems = new([.. Up().Select(p => new MenuItem(p, "", () => TryGoPath(p)))])
 				}.Show(),
 				[(int)Button1Pressed] = e => e.Handled = (GoLeft())
 			});
-
 			pathList.MouseEvD(new() {
 				[(int)Button1Pressed] = e => {
 					var i = pathList.TopItem + e.MouseEvent.Y;
@@ -255,6 +257,11 @@ public class ExploreSession {
 					pathList.SetNeedsDisplay();
 					e.Handled = true;
 				},
+				[(int)Button1Released] = e => {
+					cwdData.SetMark(pathList.SelectedItem, !cwdData.IsMarked(pathList.SelectedItem));
+					e.Handled = true;
+				},
+
 				[(int)Button3Pressed] = e => {
 					var prev = pathList.SelectedItem;
 
@@ -277,7 +284,7 @@ public class ExploreSession {
 				if(!pathList.HasFocus) return null;
 				return (Action?)((int)e.KeyCode switch {
 					(int)Enter or (int)CursorRight => () => GoItem(),
-					(int)CursorLeft => () => GoPath(Path.GetDirectoryName(cwd)),
+					(int)CursorLeft => () => TryGoPath(Path.GetDirectoryName(cwd)),
 					(int)Esc => () => { },
 					/*
 					Key.Space => () => {
@@ -303,6 +310,15 @@ public class ExploreSession {
 					'[' => () => GoPrev(),
 					']' => () => GoNext(),
 					'\\' => () => GoLeft(),
+
+					'<' => () => {
+						main.folder.SwitchTab(-1);
+					},
+					'>' => () => {
+						main.folder.SwitchTab(1);
+					},
+
+
 					',' => () => {
 						//Create new tab
 						if(cwdRecall != null) SetCwd(cwdRecall);
@@ -506,7 +522,7 @@ public class ExploreSession {
 			});
 			bool GoLeft (int times = 1) =>
 				Enumerable.Range(0, times).All(
-					_ => Path.GetFullPath(Path.Combine(cwd, "..")) is { } s && s != cwd && GoPath(s));
+					_ => Path.GetFullPath(Path.Combine(cwd, "..")) is { } s && s != cwd && TryGoPath(s));
 			void GoItem () {
 				var ind = pathList.SelectedItem;
 				if(!(ind > -1 && ind < cwdData.Count)) {
@@ -514,25 +530,32 @@ public class ExploreSession {
 				}
 				Go(cwdData.list[pathList.SelectedItem]);
 				void Go (PathItem i) {
-					if(i.propSet.Contains(IS_LOCKED)) {
+					if(i.HasProp(IS_LOCKED)) {
 						return;
 					}
-					if(i.propDict.TryGetValue(IS_LINK_TO.id, out var link)) {
-						var dest = ((Prop<string>)link).data;
+					if(i.GetProp<string>(IN_ZIP, out var root)) {
+						zipRoot = root;
+						if(i.HasProp(IS_DIRECTORY)) {
+							GoPath(i.path);
+						} else {
+
+						}
+						return;
+					}
+					if(i.HasProp(IS_ZIP)) {
+						zipRoot = i.path;
+						GoPath(i.path);
+						return;
+					}
+					zipRoot = null;
+
+					if(i.GetProp<string>(IS_LINK_TO, out var dest)) {
 						var destItem = GetPathItem(dest);
 						Go(destItem);
 						return;
 					}
-					if(i.propDict.ContainsKey(IS_ZIP.id)) {
-						using(ZipArchive zip = ZipFile.Open(i.path, ZipArchiveMode.Read)) {
-							foreach(ZipArchiveEntry entry in zip.Entries) {
-								Debug.Print(entry.FullName);
-							}
-						}
-						return;
-					}
-					if(i.propSet.Contains(IS_DIRECTORY)) {
-						GoPath(i.path);
+					if(i.HasProp(IS_DIRECTORY)) {
+						TryGoPath(i.path);
 						return;
 					}
 					RunCmd($"cd {cwd} & {i.path}");
@@ -572,7 +595,7 @@ public class ExploreSession {
 		}
 
 		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
-			if(!GoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
+			if(!TryGoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
 			}
 			goto Handled;
 		}
@@ -618,7 +641,7 @@ public class ExploreSession {
 	/// </summary>
 	/// <param name="cmd">Should not require cwd</param>
 	/// <returns></returns>
-	public static Process RunCmd (string cmd) {
+	public static Process RunCmd (string cmd, string cwd = null) {
 		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Executables")}'";
 		var cmdArgs = @$"/c {cmd} & pause";
 		var pi = new ProcessStartInfo("cmd.exe") {
@@ -626,6 +649,9 @@ public class ExploreSession {
 			UseShellExecute = true,
 			//WindowStyle = ProcessWindowStyle.Hidden,
 		};
+		if(cwd != null) {
+			pi.WorkingDirectory = cwd;
+		}
 		return Process.Start(pi);
 	}
 
@@ -658,6 +684,9 @@ public class ExploreSession {
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;
 			}
+			if(path.EndsWith(".py"))
+				yield return IS_PYTHON;
+
 		} else {
 			throw new Exception("What the hell is wrong with you?");
 		}
@@ -688,6 +717,10 @@ public class ExploreSession {
 		//yield return new MenuItem(item.local, null, null, () => false);
 		//yield return new MenuItem("----", null, null, () => false);
 
+		if(item.HasProp(IN_ZIP)) {
+			yield break;
+		}
+
 		var RunCommand =
 			new MenuItem("Command", null, () => {
 				RequestName("Command", cmd => {
@@ -700,6 +733,17 @@ public class ExploreSession {
 			new MenuItem("Use system terminal", null, () => {
 				StartCmd(path);
 			});
+
+
+		if(item.HasProp(IS_PYTHON)) {
+			yield return new MenuBarItem("Run in Python3", null, () => {
+			});
+			yield return new MenuItem("Args", null, () => {
+				RequestName("Args", args => {
+					return true;
+				});
+			});
+		}
 
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuBarItem("Explore", null, () => {
@@ -719,9 +763,9 @@ public class ExploreSession {
 				]
 			};
 		} else if(item.HasProp(IS_FILE)) {
-			yield return new MenuItem("Edit", null, () =>
-				main.folder.AddTab($"Edit {item.local}", new EditSession(item.path).root, true, main.root.FirstOrDefault()?.Focused)
-			);
+			yield return new MenuItem("Edit", null, () => {
+				main.folder.AddTab($"Edit {item.local}", new EditSession(main, item.path).root, true, main.root.FirstOrDefault()?.Focused);
+			});
 		}
 
 		if(Path.GetDirectoryName(item.path) is { } par) {
@@ -815,6 +859,43 @@ public class ExploreSession {
 	/// This should be refactored so that ctx handles path updates
 	/// </summary>
 	public IEnumerable<MenuItem> GetInstanceActions(Main main, PathItem item) {
+
+		if(item.GetProp<string>(IN_ZIP, out var zipR)) {
+
+			var zipPath = item.path.Replace(Path.GetFullPath($"{zipR}/"), "");
+
+			if(item.HasProp(IS_DIRECTORY)) {
+				yield return new MenuItem("Extract Dir", null, () => RequestName($"Extract {item.path}", dest => {
+
+					if(!File.Exists(dest)) {
+						Directory.CreateDirectory(dest);
+						using var zip = ZipFile.OpenRead(zipR);
+
+						var entries = zip.Entries
+							.Where(e => !e.FullName.EndsWith('/') && Path.GetFullPath($"{zipR}/{e.FullName}").StartsWith(item.path)).ToArray();
+						foreach(var entry in entries) {
+							var entryPath = Path.GetFullPath($"{zipR}/{entry.FullName}");
+							var sub = entryPath.Replace(Path.GetFullPath($"{item.path}/"), null);
+							var entryDest = $"{dest}/{sub}";
+							Directory.CreateDirectory(Path.GetDirectoryName(entryDest));
+							entry.ExtractToFile(entryDest, true);
+						}
+						return true;
+					}
+					return false;
+				}, $"{Path.GetDirectoryName(zipR)}/{Path.GetFileNameWithoutExtension(zipR)}"));
+			} else {
+				yield return new MenuItem("Extract File", null, () => RequestName($"Extract {item.path}", dest => {
+					using var zip = ZipFile.OpenRead(zipR);
+					var entry = zip.GetEntry(zipPath);
+					entry.ExtractToFile(dest);
+					return true;
+				}, $"{Path.GetDirectoryName(zipR)}/{Path.GetFileNameWithoutExtension(zipR)}"));
+			}
+
+			yield break;
+		}
+
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuItem("Remember", null, () => cwdRecall = item.path);
 			yield return new MenuItem("New File", null, () => RequestName("New File", name => {
@@ -1050,10 +1131,10 @@ public class ExploreSession {
 			ctx.pathData[path] = new(item.local, item.path, new([.. item.propSet, IS_REPOSITORY]));
 			SetRepo(path);
 			RefreshChanges();
-		} else if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoFile, out var prop)) {
-			if(Directory.Exists($"{repoFile.root}/.git")) {
+		} else if(item.GetProp<RepoItem>(IN_REPOSITORY, out var repoItem, out var prop)) {
+			if(Directory.Exists($"{repoItem.root}/.git")) {
 				//We already know that this directory is within some repository from a previous visit.
-				SetRepo(repoFile.root);
+				SetRepo(repoItem.root);
 				RefreshChanges();
 			} else {
 				//Error
@@ -1061,7 +1142,7 @@ public class ExploreSession {
 			}
 		}
 	}
-	void RefreshListing (string s) {
+	void RefreshDirListing (string s) {
 		try {
 			cwdData.list.Clear();
 			cwdData.list.AddRange(Directory.GetDirectories(s).Select(GetPathItem).Concat(Directory.GetFiles(s).Select(GetPathItem)).OrderByDescending(p => File.GetLastWriteTimeUtc(p.path)));
@@ -1111,33 +1192,76 @@ public class ExploreSession {
 		lastIndex[path] = pathList.SelectedItem;
 		//Refresh the repo in case it got deleted for some reason
 		RefreshRepo(path);
-		RefreshListing(path);
+		RefreshDirListing(path);
 		if(ctx.pathData[cwd].HasProp(IN_REPOSITORY)) {
 			RefreshChanges();
 		}
 		RefreshAddressBar();
 	}
+
+	void ShowZip (string path) {
+		PathItem GetZipItem (string path, HashSet<IProp> props) => new PathItem(Path.GetFileName(path), Path.GetFullPath($"{zipRoot}/{path}"), props);
+		PathItem GetZipFile (string path) => GetZipItem(path, [IN_ZIP.Make(zipRoot), IS_FILE]);
+		PathItem GetZipDir (string path) => GetZipItem(path, [IN_ZIP.Make(zipRoot), IS_DIRECTORY]);
+
+		using var zip = ZipFile.OpenRead(zipRoot);
+		var curr = path.Replace($"{zipRoot}", null).TrimStart('/', '\\');
+		cwdData.list.Clear();
+		HashSet<string> dirs = [];
+		HashSet<string> files = [];
+		foreach(var f in zip.Entries) {
+			var par = Path.GetDirectoryName(f.FullName);
+			if(par == curr) {
+
+				if(Path.GetFullPath($"{zipRoot}/{f.FullName}/") is { }l && Path.GetFullPath($"{zipRoot}/{curr}/") is { }r && l == r) {
+					continue;
+				}
+				files.Add(f.FullName);
+				continue;
+			}
+			if(Path.GetDirectoryName(par) == curr) {
+				dirs.Add(par);
+				continue;
+			}
+		}
+		cwdData.list.AddRange([.. dirs.Select(GetZipDir), .. files.Select(GetZipFile)]);
+	}
 	void SetCwd (string dest) {
 		var path = Path.GetFullPath(dest);
-		RefreshRepo(path);
-		RefreshListing(path);
+		if(zipRoot is { } r && path.StartsWith(r) == true) {
+			ShowZip(path);
+			int i = 0;
+			//cwdData.list.AddRange(Directory.GetDirectories(s).Select(GetPathItem).Concat(Directory.GetFiles(s).Select(GetPathItem)).OrderByDescending(p => File.GetLastWriteTimeUtc(p.path)));
+		} else {
+			zipRoot = null;
+			RefreshRepo(path);
+			RefreshDirListing(path);
+		}
 		lastIndex[cwd] = pathList.SelectedItem;
 		cwd = path;
 		RefreshAddressBar();
 	}
-	bool GoPath (string? dest) {
+
+	void GoPath(string dest) {
+		cwdNext.Clear();
+		cwdPrev.AddLast(cwd);
+		SetCwd(dest);
+		RefreshPads();
+	}
+	bool TryGoPath (string dest) {
 		var f = Path.GetFileName(cwd);
 		if(fx.workroot is { } root && !dest.Contains(root)) {
 			return false;
 		}
+
 		if(Directory.Exists(dest)) {
-			cwdNext.Clear();
-			cwdPrev.AddLast(cwd);
-			SetCwd(dest);
-			RefreshPads();
+			GoPath(dest);
 			if(cwdData.list.FindIndex(p => p.local == f) is {}ind and not -1) {
 				pathList.SelectedItem = ind;
 			}
+			return true;
+		} else if(zipRoot is { }r && File.Exists(r) && dest.StartsWith(r) == true) {
+			GoPath(dest);
 			return true;
 		}
 		return false;
@@ -1200,24 +1324,28 @@ public record ProcItem (Process p) {
 }
 public record PathItem (string local, string path, HashSet<IProp> propSet) {
 	public readonly Dictionary<string, IProp> propDict =
-		propSet?.ToDictionary(p => p.id, p => p);
+		propSet.ToDictionary(p => p.id, p => p);
 	public bool HasProp (IProp p) => propSet.Contains(p);
 	public bool HasProp (IPropGen p) => propDict.ContainsKey(p.id);
-	public bool HasProp<T> (IPropGen p, T data) where T : notnull => propDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
+	public bool HasPropData<T> (IPropGen p, T data) where T : notnull => propDict.TryGetValue(p.id, out var prop) && data.Equals(((Prop<T>)prop).data);
 	public bool GetProp (IPropGen p, out IProp prop) => propDict.TryGetValue(p.id, out prop);
 	public bool GetProp<T> (IPropGen p, out T data) {
-		data =
-			propDict.TryGetValue(p.id, out var prop) is { } b && b ?
-				((Prop<T>)prop).data :
-				default;
-		return b;
+		if(propDict.TryGetValue(p.id, out var prop)) {
+			data = ((Prop<T>)prop).data;
+			return true;
+		} else {
+			data = default(T);
+			return false;
+		}
 	}
 	public bool GetProp<T> (IPropGen p, out T data, out IProp prop) {
-		data =
-			propDict.TryGetValue(p.id, out prop) is { } b && b ?
-				((Prop<T>)prop).data :
-				default;
-		return b;
+		if(propDict.TryGetValue(p.id, out prop)) {
+			data = ((Prop<T>)prop).data;
+			return true;
+		} else {
+			data = default(T);
+			return false;
+		}
 	}
 	public T GetProp<T> (IPropGen p) => ((Prop<T>)propDict[p.id]).data;
 	public bool dir => HasProp(IS_DIRECTORY);

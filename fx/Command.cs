@@ -15,11 +15,13 @@ public record Command () {
 	public string exe;
 	public TargetAny targetAny;
 
+	public bool cd = false;
+
 	public static string EXECUTABLES_DIR = "Executables";
 	public string fmt { set => exe = @$"""{value}"""; }
 	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_DIR}/{value}")}"" {{0}}"; }
 	public bool Accept (string path) => targetAny.Accept(path);
-	public string GetCmd (string target) => string.Format(exe, target);
+	public string GetCmd (string target) => $"{string.Format(exe, target)}";
 }
 public interface ITarget {
 	public bool Accept (string path);
@@ -35,7 +37,9 @@ public record TargetAny () : ITarget {
 public record TargetFile () : ITarget {
 	[StringSyntax("Regex")]
 	public string pattern = ".+";
-	public string ext { set => pattern = $"[^\\.]*\\.({value})$"; }
+	public string ext { set => pattern = $"[^\\.]*\\.({Regex.Escape(value)})$"; }
+
+	public string name { set => pattern = $"({Regex.Escape(value)})$"; }
 	public bool Accept (string path) {
 		return !Conditions().Contains(false);
 		IEnumerable<bool> Conditions () {

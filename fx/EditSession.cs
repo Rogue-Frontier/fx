@@ -10,7 +10,19 @@ using static Terminal.Gui.KeyCode;
 namespace fx;
 public class EditSession {
 	public View root;
-	public EditSession (string path, int row = 0, int col = 0) {
+
+	public event Action Close;
+	public EditSession (Main main, string path, int row = 0, int col = 0) {
+
+		main.TermEnter += e => {
+			if(main.folder.currentBody == root) {
+				var cmd = e.text;
+				cmd = string.Format(cmd, path);
+				ExploreSession.RunCmd(cmd, Path.GetDirectoryName(path));
+				e.term.Text = "";
+			}
+		};
+
 		root = new View() {
 			X = 0,
 			Y = 0,
@@ -39,17 +51,11 @@ public class EditSession {
 		var mode = new Label() {
 			AutoSize = false,
 			X = 0,
-			Y = 0,
+			Y = 1,
 			Width = 8,
 			Height = 1,
-			Text = "INSERT",
+			Text = "EDIT",
 		};
-
-		bool edit = true;
-		void RefreshMode () {
-			mode.Text = edit ? "EDIT" : "READ";
-		}
-
 		var textView = new TextView() {
 			X = 0,
 			Y = 2,
@@ -58,30 +64,70 @@ public class EditSession {
 			Text = File.ReadAllText(path),
 		};
 
+		void RefreshMode () {
+			mode.Text = textView.ReadOnly ? "READ" : "EDIT";
+		}
+		void Save () {
+			File.WriteAllText(path, textView.Text);
+		}
 
 		save.MouseClickD(new() {
 			[Button1Clicked] = _ => {
-				File.WriteAllText(path, textView.Text);
+				Save();
 			}
 		});
 		textView.KeyDownD(new() {
 			[(int)Esc] = e => {
+				e.Handled = true;
 				if(!textView.ReadOnly) {
 					textView.ReadOnly = true;
-				} else {
-					return;
+					RefreshMode();
 				}
-				Done:
-				e.Handled = true;
 			},
-
-			['I'] = e => {
+			[(int)Enter] = e => {
+				e.Handled = textView.ReadOnly;
 				if(textView.ReadOnly) {
 					textView.ReadOnly = false;
-				} else {
-					e.Handled = false;
+					RefreshMode();
 				}
 			},
+			[(int)(Enter | ShiftMask)] = e => {
+				e.Handled = !textView.ReadOnly;
+				if(e.Handled) {
+					textView.ReadOnly = true;
+					RefreshMode();
+				}
+			},
+
+			['S'] = e => {
+				e.Handled = textView.ReadOnly;
+				if(e.Handled)
+					Save();
+			},
+			[':'] = e => {
+				e.Handled = textView.ReadOnly;
+				if(e.Handled) {
+					main.FocusTerm();
+
+				}
+			},
+			[(int)Delete] = e => {
+				if(textView.ReadOnly)
+					main.folder.RemoveTab();
+			},
+
+			['<'] = e => {
+				e.Handled = textView.ReadOnly;
+				if(e.Handled) {
+					main.folder.SwitchTab(-1);
+				}
+			},
+			['>'] = e => {
+				e.Handled = textView.ReadOnly;
+				if(e.Handled) {
+					main.folder.SwitchTab(1);
+				}
+			}
 
 		});
 		root.KeyDownD(new() {
@@ -102,17 +148,7 @@ public class EditSession {
 				return;
 			},
 		});
-
-		var main = new Main();
-		main.TermEnter += e => {
-			if(main.folder.currentBody == root) {
-				var cmd = e.text;
-				cmd = string.Format(cmd, path);
-
-				ExploreSession.RunCmd(cmd);
-			}
-		};
 		textView.CursorPosition = new(col, row);
-		SView.InitTree([root, save, textView]);
+		SView.InitTree([root, save, mode, textView]);
 	}
 }
