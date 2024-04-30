@@ -16,9 +16,9 @@ using HWND = nint;
 
 public record WindowItem(HWND window, string name, uint pid, string path);
 /// <summary>Contains functionality to get all the open windows.</summary>
-public static class Monitor {
+public static class WinApi {
 	[DllImport("user32.dll")]
-	public static extern void SwitchToThisWindow (IntPtr hWnd, bool fAltTab);
+	public static extern void SwitchToWnd (IntPtr hWnd, bool fAltTab);
 
 	/// <summary>Returns a dictionary that contains the handle and title of all the open windows.</summary>
 	/// <returns>A dictionary that contains the handle and title of all the open windows.</returns>

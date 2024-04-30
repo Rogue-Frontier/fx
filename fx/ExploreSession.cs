@@ -79,7 +79,12 @@ public class ExploreSession {
 			Width = Dim.Fill() - 1,
 			Height = 1,
 			ReadOnly = true,
-			CanFocus = false
+			CanFocus = false,
+
+
+			ColorScheme = Application.Top.ColorScheme with {
+				Focus = new(Color.White, new Color(31, 31, 31))
+			}
 		};
 		var freqPane = new View() {
 			Title = "Recents",
@@ -178,13 +183,6 @@ public class ExploreSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			Source = new ListMarker<WindowItem>(procData, (w, index) => $"{Path.GetFileName(w.path), -20} {w.name}"),
-			ColorScheme = new() {
-				HotNormal = new(Color.Black, Color.White),
-				Normal = new(Color.White, Color.Blue),
-				HotFocus = new(Color.Black, Color.White),
-				Focus = new(Color.White, Color.Black),
-				Disabled = new(Color.Red, Color.Black)
-			}
 		};
 		var repoPane = new View() {
 			Title = "Repository",
@@ -202,13 +200,6 @@ public class ExploreSession {
 			Height = Dim.Fill(),
 			AllowsMarking = true,
 			AllowsMultipleSelection = true,
-			ColorScheme = new() {
-				HotNormal = new(Color.Black, Color.White),
-				Normal = new(Color.White, Color.Blue),
-				HotFocus = new(Color.Black, Color.White),
-				Focus = new(Color.White, Color.Black),
-				Disabled = new(Color.Red, Color.Black)
-			}
 		};
 		InitTreeLocal();
 		InitEvents();
@@ -255,6 +246,8 @@ public class ExploreSession {
 						return;
 					pathList.SelectedItem = i;
 					pathList.SetNeedsDisplay();
+
+					pathList.SetFocus();
 					e.Handled = true;
 				},
 				[(int)Button1Released] = e => {
@@ -298,27 +291,17 @@ public class ExploreSession {
 						term.PositionCursor();
 					},
 					*/
-
 					'F' | (int)CtrlMask => () => {
 						var find = new FindSession(main, cwd);
 						main.folder.AddTab($"Find {cwd}", find.root, true, root.Focused);
 						find.rootBar.SetLock(true);
 						find.FindDirs();
-					}
-					,
-
+					},
 					'[' => () => GoPrev(),
 					']' => () => GoNext(),
 					'\\' => () => GoLeft(),
-
-					'<' => () => {
-						main.folder.SwitchTab(-1);
-					},
-					'>' => () => {
-						main.folder.SwitchTab(1);
-					},
-
-
+					'<' => () => { main.folder.SwitchTab(-1); },
+					'>' => () => { main.folder.SwitchTab(1); },
 					',' => () => {
 						//Create new tab
 						if(cwdRecall != null) SetCwd(cwdRecall);
@@ -328,37 +311,31 @@ public class ExploreSession {
 						cc.MenuBar.KeyDownD(value: new() {
 							{ '.', _ => cc.Hide() }
 						});
-					}
-					,
+					},
 					':' => () => main.FocusTerm(pathList),
 					'\'' => () => {
 						//Copy file
 						return;
-					}
-					,
+					},
 					'"' => () => {
 						if(!GetItem(out var p) || p.dir) return;
 						Preview($"Preview: {p.path}", File.ReadAllText(p.path));
-					}
-					,
+					},
 					'?' => () => {
 						if(!GetItem(out var p)) return;
 						ShowProperties(p);
-					}
-					,
+					},
 					'/' => () => {
 						if(!GetItem(out var p, out var ind)) return;
 						var c = ShowContext(p, ind - pathList.TopItem + 2, 2);
-					}
-					,
+					},
 					'~' => () => {
 						if(!GetItem(out var p)) return;
 						if(!fx.locked.Remove(p.path)) {
 							fx.locked.Add(p.path);
 						}
 						RefreshCwd();
-					}
-					,
+					},
 					'!' => () => {
 						//need option to collapse single-directory chains / single-non-empty-directory chains
 						if(!GetItem(out var p))
@@ -367,19 +344,16 @@ public class ExploreSession {
 							ctx.fx.pins.Add(p.path);
 						}
 						freqList.SetNeedsDisplay();
-					}
-					,
+					},
 					'@' => () => {
 						//set dir as workroot
 						fx.workroot = fx.workroot != cwd ? cwd : null;
 						RefreshCwd();
-					}
-					,
+					},
 					'#' => () => {
 						main.FocusTerm(pathList);
 						main.term.Text += $"{{{pathList.SelectedItem}}}";
-					}
-					,
+					},
 					>= 'a' and <= 'z' => () => {
 						var c = $"{(char)e.AsRune.Value}";
 						var index = pathList.SelectedItem;
@@ -392,8 +366,7 @@ public class ExploreSession {
 						if(dest.Index == -1) return;
 						pathList.SelectedItem = dest.Index;
 						pathList.SetNeedsDisplay();
-					}
-					,
+					},
 					>= 'A' and <= 'Z' => () => {
 						var index = (int)e.KeyCode - 'A' + pathList.TopItem;
 						if(pathList.SelectedItem == index) {
@@ -416,7 +389,7 @@ public class ExploreSession {
 				[(int)CursorRight] = default,
 				[(int)Enter] = _ => {
 					var item = procData[procList.SelectedItem];
-					Monitor.SwitchToThisWindow(item.window, true);
+					WinApi.SwitchToWnd(item.window, true);
 				},
 				[(int)Backspace] = _ => {
 					if(!(procList.SelectedItem < procData.Count))
@@ -437,7 +410,7 @@ public class ExploreSession {
 					IEnumerable<MenuItem> GetActions () {
 						yield return new MenuItem("Cancel", null, () => { });
 						yield return new MenuItem("Switch To", null, () => {
-							Monitor.SwitchToThisWindow(item.window, true);
+							WinApi.SwitchToWnd(item.window, true);
 						});
 						yield return new MenuItem("Kill", null, () => {
 							Process.GetProcessById((int)item.pid).Kill();
@@ -567,7 +540,7 @@ public class ExploreSession {
 		}
 		void UpdateProcesses () {
 			procData.Clear();
-			procData.AddRange(Monitor.GetOpenWindows());
+			procData.AddRange(WinApi.GetOpenWindows());
 			//procList.SetSource(procData);
 			procList.SetNeedsDisplay();
 		}
@@ -764,7 +737,7 @@ public class ExploreSession {
 			};
 		} else if(item.HasProp(IS_FILE)) {
 			yield return new MenuItem("Edit", null, () => {
-				main.folder.AddTab($"Edit {item.local}", new EditSession(main, item.path).root, true, main.root.FirstOrDefault()?.Focused);
+				main.folder.AddTab($"Edit", new EditSession(main, item.path).root, true, main.root.FirstOrDefault()?.Focused);
 			});
 		}
 
@@ -1305,14 +1278,19 @@ public class ExploreSession {
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
 		});
-		d.Add(new TextView() {
+		var tv = new TextView() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			Text = content,
 			ReadOnly = true,
-		});
+		};
+		d.ColorScheme = d.ColorScheme with {
+			Focus = new Terminal.Gui.Attribute(Color.White, Color.Black)
+		};
+		tv.ColorScheme = d.ColorScheme;
+		d.Add(tv);
 		Application.Run(d);
 	}
 	private void SetRepo(string root) {

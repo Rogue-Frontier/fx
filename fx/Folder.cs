@@ -26,14 +26,14 @@ public record Folder {
 			Height = 3,
 
 			Title = "Tabs",
-			BorderStyle = LineStyle.Single
+			//BorderStyle = LineStyle.Single
 		};
 		body = new View() {
 			X = 0,
-			Y = 3,
+			Y = 1,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
-			BorderStyle = LineStyle.Single
+			//BorderStyle = LineStyle.Single
 		};
 		foreach(var (name, view) in tabs) {
 			var tab = new Tab(name, view);
@@ -59,10 +59,10 @@ public record Folder {
 	public void Refresh () {
 		head.RemoveAll();
 		var barLeft = new View() {
-			Title = " ",
+			Title = "  ",
 			X = 0,
 			Y = 0,
-			Width = 1,
+			Width = 2,
 			Height = 1
 		};
 		head.Add(barLeft);
@@ -193,7 +193,7 @@ public record Tab {
 				X = Pos.Right(leftBar),
 				Y = 0,
 				Height = 1,
-				Width = name.Length + (home ? 0 : 3),
+				Width = name.Length + (home ? 0 : 0),
 			};
 			root.MouseEvD(new() {
 				[(int)Button1Pressed] = _ => folder.FocusTab(this)
@@ -208,16 +208,16 @@ public record Tab {
 				kill.MouseEvD(new() {
 					[(int)Button1Pressed] = _ => folder.RemoveTab(view, out var _)
 				});
-				InitTree([[root, kill]]);
+				//InitTree([[root, kill]]);
 			}
 			return root;
 		}).Value;
 
 		rightBar = new View() {
-			Title = "%",
+			Title = "%%",
 			X = Pos.Right(tab) + 0,
 			Y = 0,
-			Width = 1,
+			Width = 2,
 			Height = 1,
 		};
 		InitTree([[head, tab, rightBar]]);
@@ -225,8 +225,8 @@ public record Tab {
 	}
 	public void Refresh (bool open = false) {
 		if(open) {
-			leftBar.Text = "<";
-			rightBar.Text = ">";
+			leftBar.Text = "<[";
+			rightBar.Text = "]>";
 		} else {
 			leftBar.Text = rightBar.Text = " ";
 		}

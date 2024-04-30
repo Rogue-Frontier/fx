@@ -38,6 +38,7 @@ using ClangSharp.Interop;
 using Type = System.Type;
 using Calendar = fx.Calendar;
 using Google.Apis.Auth.OAuth2;
+using Color = Terminal.Gui.Color;
 
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
@@ -52,7 +53,11 @@ try {
 	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
 		main.ctx.Save();
 	};
+	
 	Application.Top.Add(main.root);
+
+
+
 	Application.Run();	
 } catch (Exception e){
 	main.ctx.Save();
@@ -119,7 +124,12 @@ public class Main {
 			Width = Dim.Fill(),
 			Height = 1,
 			DesiredCursorVisibility = CursorVisibility.Box,
-			TabStop = false
+			TabStop = false,
+
+
+			ColorScheme = Application.Top.ColorScheme with {
+				Focus = new(Color.White, new Color(31, 31, 31))
+			}
 		};
 		term.Leave += (a, e) => term.SetLock();
 		term.MouseClickD(new() {
@@ -238,6 +248,18 @@ public class Main {
 			Enabled = true,
 			Menus = [..GetBarItems()]
 		};
+		
+		var b = new Terminal.Gui.Attribute(Color.White, Color.Black);
+		var w = new Terminal.Gui.Attribute(Color.White, new Color(75, 75, 75));
+		window.ColorScheme = window.ColorScheme with {
+
+			Focus = w,
+			Normal = b,
+			Disabled = b,
+			HotFocus = b,
+			HotNormal = b
+		};
+
 		root = [window, windowMenuBar];
 	}
 	public void FocusTerm (View termPrev = null) {

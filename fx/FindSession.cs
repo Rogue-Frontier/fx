@@ -496,7 +496,7 @@ public record FindFilter (Regex filePattern, Regex linePattern, string replace) 
 		LeafType.Line;
 }
 public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
-	ConcurrentDictionary<string, IFind[]> node = new();
+	ConcurrentDictionary<string, IFindPath[]> node = new();
 	ConcurrentDictionary<string, FindLine[]> line = new();
 
 	public bool SupportsCanExpand => true;
@@ -531,31 +531,14 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 				}
 			}
 		} else if(filter.LeafType == LeafType.File) {
-
-			/*
-			int i = 0;
-			List<string> q = [root];
-			while(i < q.Count) {
-				Traverse(q[i]);
-				i++;
-			}
-			void Traverse (string dir) {
-				var sub = Directory.GetDirectories(dir);
-				node[dir] = [.. sub, .. Directory.GetFiles(dir)];
-				foreach(var d in sub) {
-					q.Add(d);
-				}
-			}
-			*/
-
-			IEnumerable<string> matchFiles = GetAllFiles(root);
-			if(filter.filePattern.ToString().Any()) {
+			IEnumerable<string> matchFiles = GetAllSubFiles(root);
+			if(filter.filePattern is { } fp && fp.ToString().Any()) {
 				matchFiles = matchFiles.Where(f => filter.filePattern.IsMatch(f));
 			}
 			MakeNodes(matchFiles);
 
 		} else if(filter.LeafType == LeafType.Line) {
-			IEnumerable<string> matchFiles = GetAllFiles(root);
+			IEnumerable<string> matchFiles = GetAllSubFiles(root);
 			if(filter.filePattern is { } fp && fp.ToString().Any()) {
 				matchFiles = matchFiles.Where(s => fp.IsMatch(s));
 			}
@@ -580,14 +563,17 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 			//Filter out files before making the tree
 			ConcurrentDictionary<string, HashSet<string>> subfiles = new(files
 				.GroupBy(Path.GetDirectoryName)
-				.ToDictionary(g => g.Key, g => new HashSet<string>(g)));
+				.Select(g => (g.Key, new HashSet<string>(g)))
+				.ToDictionary()
+				);
 
 			var activeSubdir = subfiles.Keys;
 			while(activeSubdir.Any()) {
 				var dict = activeSubdir
 					.GroupBy(Path.GetDirectoryName)
 					.Where(g => g.Key != null)
-					.ToDictionary(g => g.Key, g => g.ToArray());
+					.Select(g => (g.Key, g.ToArray()))
+					.ToDictionary();
 				foreach(var (dir, subdir) in dict) {
 					subfiles.GetOrAdd(dir, []).UnionWith(subdir);
 				}
@@ -600,9 +586,8 @@ public record TreeFinder (FindFilter filter) : ITreeBuilder<IFind> {
 
 			}
 		}
-
-		IEnumerable<string> GetAllFiles (string path) => [
-			.. Directory.GetDirectories(path).SelectMany(d => GetAllFiles(d)),
+		IEnumerable<string> GetAllSubFiles (string path) => [
+			.. Directory.GetDirectories(path).SelectMany(d => GetAllSubFiles(d)),
 			.. Directory.GetFiles(path)
 		];
 	}
@@ -615,11 +600,13 @@ public interface IFind {
 			new FindDir(path) :
 			new FindFile(path);
 }
-public record FindDir (string path) : IFind {
+public interface IFindPath : IFind {
+}
+public record FindDir (string path) : IFindPath {
 	public string name = Path.GetFileName(path);
 	public static FindDir New (string path) => new(path);
 }
-public record FindFile (string path) : IFind {
+public record FindFile (string path) : IFindPath {
 	public string name = Path.GetFileName(path);
 	public static FindFile New (string path) => new(path);
 }

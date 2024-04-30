@@ -62,6 +62,10 @@ public class EditSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			Text = File.ReadAllText(path),
+
+			ColorScheme = Application.Top.ColorScheme with {
+				Focus = new(Color.White, new Color(25,25,25))
+			}
 		};
 
 		void RefreshMode () {
@@ -70,12 +74,12 @@ public class EditSession {
 		void Save () {
 			File.WriteAllText(path, textView.Text);
 		}
-
 		save.MouseClickD(new() {
 			[Button1Clicked] = _ => {
 				Save();
 			}
 		});
+
 		textView.KeyDownD(new() {
 			[(int)Esc] = e => {
 				e.Handled = true;
@@ -98,24 +102,36 @@ public class EditSession {
 					RefreshMode();
 				}
 			},
-
 			['S'] = e => {
 				e.Handled = textView.ReadOnly;
 				if(e.Handled)
 					Save();
 			},
+			['G' | (int)CtrlMask] = e => {
+				return;
+			},
+			['R'] = e => {
+				e.Handled = textView.ReadOnly;
+				if(!e.Handled) {
+					return;
+				}
+				var line = new string(textView.GetLine(textView.CurrentRow).Select(r => (char)r.Rune.Value).ToArray());
+				line = line.TrimStart('/');
+				var cmd = string.Format(line, path);
+				ExploreSession.RunCmd(cmd, Path.GetDirectoryName(path));
+				return;
+			},
 			[':'] = e => {
 				e.Handled = textView.ReadOnly;
 				if(e.Handled) {
 					main.FocusTerm();
-
 				}
 			},
 			[(int)Delete] = e => {
-				if(textView.ReadOnly)
+				e.Handled = textView.ReadOnly;
+				if(e.Handled)
 					main.folder.RemoveTab();
 			},
-
 			['<'] = e => {
 				e.Handled = textView.ReadOnly;
 				if(e.Handled) {
@@ -132,19 +148,21 @@ public class EditSession {
 		});
 		root.KeyDownD(new() {
 			[(int)CursorUp] = e => {
-				if(!textView.CanFocus) {
+				e.Handled = textView.ReadOnly;
+				if(e.Handled) {
 					textView.TopRow -= 1;
 					textView.SetNeedsDisplay();
 				}
 			},
 			[(int)CursorDown] = e => {
-				if(!textView.CanFocus) {
+				e.Handled = textView.ReadOnly;
+				if(e.Handled) {
 					textView.TopRow += 1;
 					textView.SetNeedsDisplay();
 				}
 			},
 
-			['S' | (uint)AltMask] = e => {
+			['G' | (uint)CtrlMask] = e => {
 				return;
 			},
 		});
