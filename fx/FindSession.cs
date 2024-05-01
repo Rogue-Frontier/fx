@@ -472,7 +472,7 @@ public class FindSession {
 		tree.SetNeedsDisplay();
 	}
 	string GetRoot () =>
-		rootBar.Text.ToString().Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE);
+		rootBar.Text.ToString().Replace(Ctx.USER_PROFILE_MASK, Ctx.USER_PROFILE);
 }
 public enum LeafType {
 	Dir, File, Line

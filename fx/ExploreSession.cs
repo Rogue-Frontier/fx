@@ -34,15 +34,22 @@ public class ExploreSession {
 	private Ctx ctx => main.ctx;
 	private Fx fx => ctx.fx;
 
+	object GetName (PathItem p) => Path.GetFileName(p.path);
+	object GetLastWrite (PathItem p) => File.GetLastWriteTimeUtc(p.path);
+	object GetLastAccess (PathItem p) => File.GetLastAccessTimeUtc(p.path);
+	object GetSize (PathItem p) => p.dir ? 0 : new FileInfo(p.path).Length;
+	public record SortMode(Func<PathItem, object> f, bool reverse);
+
 
 	public Dictionary<string, int> lastIndex = new();
 	public string cwd = Environment.CurrentDirectory;
 	public LinkedList<string> cwdPrev = new();
 	public LinkedList<string> cwdNext = new();
 	private ListMarker<PathItem> cwdData;
+	public SortMode pathSort;
 	Dictionary<string, GitItem> gitMap = new();
 	private List<GitItem> gitData = new();
-	private Label goPrev, goNext, goLeft;
+	private Label goPrev, goNext, goLeft, goTo;
 	private TextField addressBar;
 	public ListView pathList;
 	private ListView repoList;
@@ -50,15 +57,38 @@ public class ExploreSession {
 	private RepoPtr? git;
 	private string cwdRecall = null;
 
+	Regex nameFilter = null;
+
+	Action<string> cwdChanged;
+
 	public string zipRoot;
 
 	private Main main;
 	public ExploreSession (Main main, string initCwd) {
 		this.main = main;
 		this.cwd = initCwd;
-		cwdData = new(new(), (p, i) => p.local);
+		cwdData = new(new(), (p, i) => {
+
+			if(zipRoot != null) {
+				using var z = ZipFile.OpenRead(zipRoot);
+
+				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
+
+				var e = z.GetEntry(local);
+				var size = e.Length;
+				var lastWrite = e.LastWriteTime;
+				return $"{i,3}| {p.local,-24}{size,-8}{lastWrite,-16:MM/dd HH:mm}";
+			} else {
+				var a = File.GetLastAccessTimeUtc(p.path);
+				return $"{i,3}| {p.local,-24}{GetSize(p),-8}{a,-16:MM/dd HH:mm}";
+			}
+
+
+		});
 		var favData = new List<PathItem>();
 		var procData = new List<WindowItem>();
+
+		pathSort = new SortMode(GetLastWrite, false);
 
 		main.TermEnter += OnTermEnter;
 
@@ -69,9 +99,8 @@ public class ExploreSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		goPrev = new Label() { Title= "[<---]",  X = 1, TabStop = false };
-		goNext = new Label() { Title= "[--->]", X = 7, TabStop = false };
-		goLeft = new Label() { Title= "[/../]",  X = 13, TabStop = false };
+
+		/*
 		addressBar = new TextField() {
 			Title = "Address",
 			X = Pos.Percent(25) + 1,
@@ -86,11 +115,12 @@ public class ExploreSession {
 				Focus = new(Color.White, new Color(31, 31, 31))
 			}
 		};
+		*/
 		var freqPane = new View() {
 			Title = "Recents",
 			BorderStyle= LineStyle.Single,
 			X = 0,
-			Y = 1,
+			Y = 0,
 			Width = Dim.Percent(25),
 			Height = Dim.Percent(50) - 1,
 		};
@@ -107,52 +137,89 @@ public class ExploreSession {
 				Title = "Clipboard",
 				BorderStyle = LineStyle.Single,
 				X = 0,
-				Y = Pos.Percent(50),
+				Y = Pos.Bottom(freqPane),
 				Width = Dim.Percent(25),
 				Height = Dim.Percent(50),
 			};
-			var clipTab = new Lazy<View>(() => {
-				var view = new TabView() {
-					Title = "Clipboard",
-					X = 0,
-					Y = 0,
-					Width = Dim.Fill(),
-					Height = Dim.Fill()
-				};
-				var clipCutList = new ListView() {
-					Title = "Cut",
-					X = 0,
-					Y = 0,
-					Width = Dim.Fill(),
-					Height = Dim.Fill()
-				};
-				var clipHistList = new ListView() {
-					Title = "History",
-					X = 0,
-					Y = 0,
-					Width = Dim.Fill(),
-					Height = Dim.Fill()
-				};
-				return view;
-			}).Value;
-			SView.InitTree([view, clipTab]);
+
+			var clipCutList = new ListView() {
+				Title = "Cut",
+				X = 0,
+				Y = 0,
+				Width = Dim.Fill(),
+				Height = Dim.Fill()
+			};
+			var clipHistList = new ListView() {
+				Title = "History",
+				X = 0,
+				Y = 0,
+				Width = Dim.Fill(),
+				Height = Dim.Fill()
+			};
+
+			//SView.InitTree([view]);
 			return view;
 		}).Value;
 
 		var pathPane = new View() {
-			Title = "Directory",
+			//Title = "Directory",
 			BorderStyle = LineStyle.Single,
 
 			X = Pos.Percent(25),
-			Y = 1,
+			Y = 0,
 			Width = Dim.Percent(50),
-			Height = 28,
+			Height = 30,
 		};
+		cwdChanged += s => pathPane.Title = s;
 
-		pathList = new ListView() {
-			Title = "Directory Items",
+		var filter = new TextField() {
+			AutoSize = false,
 			X = 0,
 			Y = 0,
+			Width = Dim.Fill(12),
+			Height = 1,
+			ColorScheme = Application.Top.ColorScheme with {
+				Focus = new(Color.White, new Color(31, 31, 31))
+			}
+		};
+		filter.TextChanged += (a, e) => {
+			try {
+				nameFilter = new Regex(e.NewValue);
+				RefreshDirListing(cwd);
+				pathList.SetNeedsDisplay();
+			} catch {
+
+			}
+		};
+		goPrev = new Label() { Title = "[<---]", X = Pos.AnchorEnd(24), TabStop = false };
+		goNext = new Label() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
+		goLeft = new Label() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
+		goTo   = new Label() { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
+		var sortName = new Label() {
+			Text = "Name",
+			AutoSize = false,
+			X = 7,
+			Y = 1,
+			Width = 24
+		};
+		var sortSize = new Label() {
+			Text = "Size",
+			AutoSize = false,
+			X = Pos.Right(sortName),
+			Y = 1,
+			Width = 8
+		};
+		var sortAccessed = new Label() {
+			Text = "Accessed",
+			AutoSize = false,
+			X = Pos.Right(sortSize),
+			Y = 1,
+			Width = 8
+		};
+		pathList = new ListView() {
+			//Title = "Directory Items",
+			X = 0,
+			Y = Pos.Bottom(sortName),
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			AllowsMultipleSelection = true,
@@ -172,7 +239,7 @@ public class ExploreSession {
 			BorderStyle = LineStyle.Single,
 
 			X = Pos.Percent(75),
-			Y = 1,
+			Y = 0,
 			Width = Dim.Percent(25),
 			Height = Dim.Percent(50) - 1,
 		};
@@ -188,7 +255,7 @@ public class ExploreSession {
 			Title = "Repository",
 			BorderStyle = LineStyle.Single,
 			X = Pos.Percent(75),
-			Y = Pos.Percent(50),
+			Y = Pos.Bottom(procPane),
 			Width = Dim.Percent(25),
 			Height = Dim.Percent(50),
 		};
@@ -208,12 +275,12 @@ public class ExploreSession {
 		UpdateProcesses();
 		void InitTreeLocal () {
 			SView.InitTree(
-				[freqPane, freqList],
+				[freqPane],//, freqList],
 				[clipPane],
-				[pathPane, pathList],
+				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortAccessed, pathList],
 				[procPane, procList],
 				[repoPane, repoList],
-				[root, addressBar, goPrev, goNext, goLeft, freqPane, clipPane, pathPane, /*properties,*/ procPane, repoPane]
+				[root, addressBar, freqPane, clipPane, pathPane, /*properties,*/ procPane, repoPane]
 				);
 		}
 		void InitEvents () {
@@ -239,6 +306,30 @@ public class ExploreSession {
 				}.Show(),
 				[(int)Button1Pressed] = e => e.Handled = (GoLeft())
 			});
+			sortName.MouseClick += (a, e) => {
+				pathSort =
+					pathSort.f == GetName ?
+						pathSort with { reverse = !pathSort.reverse } :
+						new SortMode(GetName, false); ;
+				RefreshDirListing(cwd);
+				pathList.SetNeedsDisplay();
+			};
+			sortSize.MouseClick += (a, e) => {
+				pathSort =
+					pathSort.f == GetSize ?
+						pathSort with { reverse = !pathSort.reverse } :
+						new SortMode(GetSize, false);
+				RefreshDirListing(cwd);
+				pathList.SetNeedsDisplay();
+			};
+			sortAccessed.MouseClick += (a, e) => {
+				pathSort =
+					pathSort.f == GetLastAccess ?
+						pathSort with { reverse = !pathSort.reverse } :
+						new SortMode(GetLastAccess, false);
+				RefreshDirListing(cwd);
+				pathList.SetNeedsDisplay();
+			};
 			pathList.MouseEvD(new() {
 				[(int)Button1Pressed] = e => {
 					var i = pathList.TopItem + e.MouseEvent.Y;
@@ -262,13 +353,16 @@ public class ExploreSession {
 					if(i >= cwdData.Count)
 						return;
 					pathList.SelectedItem = i;
-					var c = ShowContext(cwdData.list[i], e.MouseEvent.Y, e.MouseEvent.X);
+					var c = ShowPathContext(cwdData.list[i], e.MouseEvent.Y - 1, e.MouseEvent.X);
 					c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
 						if(prev == -1) {
 							return;
 						}
 						pathList.SelectedItem = prev;
 					};
+					e.Handled = true;
+				},
+				[(int)Button3Released] = e => {
 					e.Handled = true;
 				}
 			});
@@ -307,7 +401,7 @@ public class ExploreSession {
 						if(cwdRecall != null) SetCwd(cwdRecall);
 					},
 					'.' => () => {
-						var cc = ShowContext(GetPathItem(cwd), 0);
+						var cc = ShowPathContext(GetPathItem(cwd), 0);
 						cc.MenuBar.KeyDownD(value: new() {
 							{ '.', _ => cc.Hide() }
 						});
@@ -327,7 +421,7 @@ public class ExploreSession {
 					},
 					'/' => () => {
 						if(!GetItem(out var p, out var ind)) return;
-						var c = ShowContext(p, ind - pathList.TopItem + 2, 2);
+						var c = ShowPathContext(p, ind - pathList.TopItem + 1, 1);
 					},
 					'~' => () => {
 						if(!GetItem(out var p)) return;
@@ -453,16 +547,17 @@ public class ExploreSession {
 				_ => null
 			});
 			*/
-			ContextMenu ShowContext (PathItem selected, int row = 0, int col = 0) {
+			ContextMenu ShowPathContext (PathItem selected, int row = 0, int col = 0) {
 				var (x, y) = pathList.GetCurrentLoc();
-				var bar = new MenuBarItem("Selected Item", [
+				var bar = new MenuBarItem("This", [
 					.. GetSingleActions(main, selected)
 				]);
 				var marked = GetMarkedItems().ToArray();
 				if(marked.Except([selected]).Any()) {
 					bar = new MenuBarItem([
+						new MenuItem("Cancel", null, () => { }),
 						bar,
-						new MenuBarItem("Marked Items", [..GetGroupActions(main, marked)])
+						new MenuBarItem("Selected", [..GetGroupActions(main, marked)])
 					]);
 				}
 				var c = new ContextMenu() {
@@ -593,19 +688,25 @@ public class ExploreSession {
 	public static void ShowProperties (PathItem item) {
 		var d = new Dialog() {
 			Title= $"Properties: {item.path}",
+
+			Width = Dim.Sized(108),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
 		});
 
-		d.Add(new TextView() {
+		var tv = new TextView() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			ReadOnly = true,
 			Text = string.Join("\n", item.propSet.Select(p => p.desc)),
-		});
+		};
+		tv.ColorScheme = d.ColorScheme with {
+			Focus = new Terminal.Gui.Attribute(Color.White, Color.Black)
+		};
+		d.Add(tv);
 
 		Application.Run(d);
 	}
@@ -1117,8 +1218,28 @@ public class ExploreSession {
 	}
 	void RefreshDirListing (string s) {
 		try {
+			PathItem transform(PathItem item) {
+				var path = item.path;
+				while(Directory.Exists(path) && Directory.GetFileSystemEntries(path) is [string sub]) {
+					path = sub;
+				}
+				var l = Path.GetDirectoryName(item.path).Length + 1;
+				return new PathItem(path[l..], path, [..GetProps(path)]);
+			}
 			cwdData.list.Clear();
-			cwdData.list.AddRange(Directory.GetDirectories(s).Select(GetPathItem).Concat(Directory.GetFiles(s).Select(GetPathItem)).OrderByDescending(p => File.GetLastWriteTimeUtc(p.path)));
+
+			var results = Directory.GetDirectories(s)
+				.Select(GetPathItem)
+				.Select(transform)
+				.OrderPath(pathSort)
+				.Concat(
+					Directory.GetFiles(s)
+						.Select(GetPathItem)
+						.OrderPath(pathSort)
+					);
+			if(nameFilter is { } nf)
+				results = results.Where(p => nf.IsMatch(p.local));
+			cwdData.list.AddRange(results);
 		}catch(UnauthorizedAccessException e) {
 		}
 	}
@@ -1144,18 +1265,17 @@ public class ExploreSession {
 		}
 	}
 	void RefreshAddressBar () {
-		var anonymize = true;
-		var userProfile = ctx.USER_PROFILE;
+		var userProfile = Ctx.USER_PROFILE;
 		var showCwd = cwd;
 		if(fx.workroot is { } root) {
 			showCwd = showCwd.Replace(root, Fx.WORK_ROOT);
 			userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
 		}
-		if(anonymize) {
-			showCwd = showCwd.Replace(userProfile, USER_PROFILE_MASK);
-		}
+		showCwd = showCwd.Replace(userProfile, USER_PROFILE_MASK);
 		//Anonymize
-		addressBar.Text = showCwd;
+		cwdChanged?.Invoke(showCwd);
+
+
 		Console.Title = showCwd;
 		pathList.SelectedItem = Math.Min(Math.Max(0, pathList.Source.Count - 1), lastIndex.GetValueOrDefault(cwd, 0));
 		pathList.SetNeedsDisplay();
@@ -1273,7 +1393,9 @@ public class ExploreSession {
 	}
 	public static void Preview (string title, string content) {
 		var d = new Dialog() {
-			Title = title
+			Title = title,
+
+			Width = Dim.Sized(108),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
@@ -1286,10 +1408,9 @@ public class ExploreSession {
 			Text = content,
 			ReadOnly = true,
 		};
-		d.ColorScheme = d.ColorScheme with {
+		tv.ColorScheme = d.ColorScheme with {
 			Focus = new Terminal.Gui.Attribute(Color.White, Color.Black)
 		};
-		tv.ColorScheme = d.ColorScheme;
 		d.Add(tv);
 		Application.Run(d);
 	}

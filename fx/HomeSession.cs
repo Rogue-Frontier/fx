@@ -43,7 +43,7 @@ public class HomeSession {
 			}
 		};
 		//Pinned folders, pinned files
-		var pinData = new ListMarker<string>(main.ctx.fx.pins, (s, i) => s);
+		var pinData = new ListMarker<string>(main.ctx.fx.pins, (s, i) => /*Ctx.Anonymize(s)*/ s);
 		var pinList = new ListView() {
 			Title = "Pinned",
 			BorderStyle = LineStyle.Single,
@@ -72,7 +72,6 @@ public class HomeSession {
 			Source=  new ListWrapper(new List<GitItem>())
 		};
 		libraryTree.AddObjects(libraryData);
-
 		libraryTree.KeyDownD(value: new() {
 			['"'] = _ => {
 				if(libraryTree.SelectedObject is ILibraryPath item && File.Exists(item.path)) {
@@ -88,6 +87,14 @@ public class HomeSession {
 				var rowObj = libraryTree.SelectedObject;
 				var (row, col) = libraryTree.GetObjectPos(rowObj) ?? (0, 0);
 				SView.ShowContext(libraryTree, [.. GetSpecificActions(row, rowObj)], row + 2, col + 2);
+			},
+			['<'] = e => {
+				e.Handled = true;
+				main.folder.SwitchTab(-1);
+			},
+			['>'] = e => {
+				e.Handled = true;
+				main.folder.SwitchTab(-1);
 			}
 		});
 		libraryTree.MouseEvD(new() {
@@ -117,27 +124,34 @@ public class HomeSession {
 			main.folder.AddTab("Expl", new ExploreSession(main, pinData.list[pinList.SelectedItem]).root, true);
 		};
 		pinList.KeyDownD(new() {
+			['"'] = k => {
+				var ind = pinList.SelectedItem;
+				if(pinData.list.ElementAtOrDefault(ind) is not { }path) return;
+				ExploreSession.Preview($"Preview: {path}", File.ReadAllText(path));
+			},
+			['?'] = k => {
+				var ind = pinList.SelectedItem;
+				if(pinData.list.ElementAtOrDefault(ind) is not { } path) return;
+				ExploreSession.ShowProperties(ctx.GetPathItem(path, ExploreSession.GetStaticProps));
+			},
+			['/'] = k => {
+				var ind = pinList.SelectedItem;
+				if(pinData.list.ElementAtOrDefault(ind) is not { } path) return;
+				var c = SView.ShowContext(pinList, [
+					new MenuItem("Cancel", null, () => { }),
+					.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(path, ExploreSession.GetStaticProps))
+					], ind - pinList.TopItem + 1, 2);
+			},
 
-				['"'] = k => {
-					var ind = pinList.SelectedItem;
-					if(pinData.list.ElementAtOrDefault(ind) is not { }path) return;
-					ExploreSession.Preview($"Preview: {path}", File.ReadAllText(path));
-				}
-				,
-				['?'] = k => {
-					var ind = pinList.SelectedItem;
-					if(pinData.list.ElementAtOrDefault(ind) is not { } path) return;
-					ExploreSession.ShowProperties(ctx.GetPathItem(path, ExploreSession.GetStaticProps));
-				}
-				,
-				['/'] = k => {
-					var ind = pinList.SelectedItem;
-					if(pinData.list.ElementAtOrDefault(ind) is not { } path) return;
-					var c = SView.ShowContext(pinList, [.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(path, ExploreSession.GetStaticProps))], ind - pinList.TopItem + 2, 2);
-				}
+			['<'] = e => {
+				e.Handled = true;
+				main.folder.SwitchTab(-1);
+			},
+			['>'] = e => {
+				e.Handled = true;
+				main.folder.SwitchTab(-1);
+			}
 		});
-
-
 		/*
 
 					'"' => () => {
@@ -156,16 +170,18 @@ public class HomeSession {
 					}
 		*/
 		pinList.MouseEvD(new() {
-			[(int)Button3Released] = e => {
+			[(int)Button3Pressed] = e => {
 				var prev = pinList.SelectedItem;
 				var i = pinList.TopItem + e.MouseEvent.Y;
 				if(i >= pinData.Count) {
-
 					//Show same menu as .
 					return;
 				}
 				pinList.SelectedItem = i;
-				var c = SView.ShowContext(libraryTree, [.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(pinData.list[i], ExploreSession.GetStaticProps))], e.MouseEvent.Y, e.MouseEvent.ScreenPosition.X);
+				var c = SView.ShowContext(libraryTree, [
+					new MenuItem("Cancel", null, () => { }),
+					.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(pinData.list[i], ExploreSession.GetStaticProps))
+					], e.MouseEvent.Y - 1, e.MouseEvent.ScreenPosition.X - 1);
 				c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
 					if(prev == -1) {
 						return;
@@ -175,9 +191,6 @@ public class HomeSession {
 				e.Handled = true;
 			}
 		});
-
-
-
 		SView.InitTree(
 			[[root, libraryTree, pinList, recentList, repoList]]
 			);
@@ -242,7 +255,6 @@ public class HomeSession {
 		}
 	}
 }
-
 public record LibraryFinder : ITreeBuilder<ILibraryTree> {
 	public bool SupportsCanExpand => true;
 	public bool CanExpand (ILibraryTree i) => GetChildren(i).Any();

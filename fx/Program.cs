@@ -39,6 +39,7 @@ using Type = System.Type;
 using Calendar = fx.Calendar;
 using Google.Apis.Auth.OAuth2;
 using Color = Terminal.Gui.Color;
+using static fx.ExploreSession;
 
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
@@ -183,6 +184,8 @@ public class Main {
 			InitTree([view, term]);
 			return view;
 		}).Value;
+
+		term.SetLock(true);
 		var homeSession = new HomeSession(this);
 		//Add context button to switch to Find with root at dir
 		//Add button to treat dir as root
@@ -241,18 +244,41 @@ public class Main {
 			yield return new MenuBarItem("_Fx", [
 				new MenuItem("Reload", "", ctx.ResetCommands)
 			]) { CanExecute = () => true };
-			yield return new MenuBarItem("_Switch", Array.Empty<MenuBarItem>()) { CanExecute = () => true };
+			yield return new MenuBarItem("_Switch", [
+				..folder.tabsList.Select(t => new MenuItem(t.name, null, () => folder.FocusTab(t)))
+			]) { CanExecute = () => true };
 		}
 		var windowMenuBar = new MenuBar() {
 			Visible = true,
 			Enabled = true,
-			Menus = [..GetBarItems()]
+			Menus = [..GetBarItems()],
+
+
+		};
+
+
+		var b = new Attribute(Color.White, Color.Black);
+		var w = new Attribute(Color.White, new Color(75, 75, 75));
+		/*
+		windowMenuBar.ColorScheme = windowMenuBar.ColorScheme with {
+			Focus = w,
+			Normal = b,
+			Disabled = b,
+			HotFocus = b,
+			HotNormal = b
+		};
+		*/
+		windowMenuBar.MenuOpening += (a, e) => {
+			windowMenuBar.Menus = [..GetBarItems()];
+			var c = e.CurrentMenu;
+
+			if(e.CurrentMenu.Title == "_Switch") {
+
+				//e.CurrentMenu.Children.First(t => t.Title == folder.currentTab.name)
+			}
 		};
 		
-		var b = new Terminal.Gui.Attribute(Color.White, Color.Black);
-		var w = new Terminal.Gui.Attribute(Color.White, new Color(75, 75, 75));
 		window.ColorScheme = window.ColorScheme with {
-
 			Focus = w,
 			Normal = b,
 			Disabled = b,
@@ -293,7 +319,7 @@ public record Fx {
 	public void Load (Ctx ctx) {
 		if(File.Exists(SAVE_PATH)) {
 			try {
-				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, ctx.USER_PROFILE));
+				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, Ctx.USER_PROFILE));
 				foreach(var f in GetType().GetFields( BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)) {
 					f.Copy(this, o);
 				}
@@ -310,8 +336,9 @@ public record Fx {
 	}
 }
 public record Ctx {
-	public const string USER_PROFILE_MASK = "%USERPROFILE%";
-	public string USER_PROFILE { get; } = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+	public static string Anonymize (string path) => path.Replace(USER_PROFILE, USER_PROFILE_MASK);
+	public static string USER_PROFILE_MASK => "%USERPROFILE%";
+	public static string USER_PROFILE => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 	private Deserializer de { get; } = new Deserializer();
 	private Serializer se { get; } = new Serializer();
 	public Command[] Commands { get; private set; }
@@ -366,13 +393,22 @@ public record Ctx {
 	}
 }
 public static class SView {
+
+	public static IEnumerable<PathItem> OrderPath(this IEnumerable<PathItem> e, SortMode s) =>
+		s.reverse ?
+			e.OrderByDescending(s.f) :
+			e.OrderBy(s.f);
 	public static void SetLock(this TextView v, bool locked = true) {
 		v.ReadOnly = locked;
 		v.CanFocus = !locked;
+
+		v.SuperView.Enabled = !locked;
 	}
 	public static void SetLock (this TextField v, bool locked = true) {
 		v.ReadOnly = locked;
 		v.CanFocus = !locked;
+
+		v.SuperView.Enabled = !locked;
 	}
 	public static (int, int) GetCurrentLoc(this View v) {
 		var (x, y) = (0, 0);
@@ -442,9 +478,10 @@ public static class SView {
 	*/
 	public static void Copy<T> (this FieldInfo field, T dest, T source) => field.SetValue(dest, field.GetValue(source));
 	public static ContextMenu ShowContext (this View view, MenuItem[] actions, int row = 0, int col = 0) {
-		var (x, y) = view.GetCurrentLoc();
+		var p = view.GetCurrentPos();
+		var (x, y) = (p.X, p.Y);
 		var c = new ContextMenu() {
-			Position = new(x + col, y + row),
+			Position = new(x + col, y + row - 1),
 			MenuItems = new MenuBarItem(null, actions)
 		};
 		c.Show();

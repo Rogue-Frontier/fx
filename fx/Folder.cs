@@ -14,8 +14,9 @@ public record Folder {
 
 	public View? currentBody => body.Subviews.SingleOrDefault();
 	private List<View> bars = new();
-	private List<Tab> tabsList = new();
+	public List<Tab> tabsList = new();
 	private Dictionary<View, Tab> tabs = new();
+	public Tab currentTab => tabs[currentBody];
 	private Dictionary<Tab, View> prevView = new();
 	public Folder(View root, params(string name, View view)[] tabs) {
 		this.root = root;
@@ -25,12 +26,12 @@ public record Folder {
 			Width = Dim.Fill(),
 			Height = 3,
 
-			Title = "Tabs",
-			//BorderStyle = LineStyle.Single
+			//Title = "Tabs",
+			BorderStyle = LineStyle.Single
 		};
 		body = new View() {
 			X = 0,
-			Y = 1,
+			Y = 1+2,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			//BorderStyle = LineStyle.Single
@@ -62,7 +63,7 @@ public record Folder {
 			Title = "  ",
 			X = 0,
 			Y = 0,
-			Width = 2,
+			Width = 1,
 			Height = 1
 		};
 		head.Add(barLeft);
@@ -158,9 +159,9 @@ public record Folder {
 				return;
 			}
 			var next = tabsList[(tabsList.IndexOf(tab) + inc + c) % c];
-			FocusTab(next, false);
+			FocusTab(next, true);
 		} else {
-			FocusTab(tabsList[0], false);
+			FocusTab(tabsList[0], true);
 		}
 	}
 	public void SetBody (View view) {
@@ -225,8 +226,9 @@ public record Tab {
 	}
 	public void Refresh (bool open = false) {
 		if(open) {
-			leftBar.Text = "<[";
-			rightBar.Text = "]>";
+
+			leftBar.Text = leftBar.Frame.Width == 1 ? "[" : " [";
+			rightBar.Text = "] ";
 		} else {
 			leftBar.Text = rightBar.Text = " ";
 		}
