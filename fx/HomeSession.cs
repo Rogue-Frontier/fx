@@ -43,7 +43,10 @@ public class HomeSession {
 			}
 		};
 		//Pinned folders, pinned files
-		var pinData = new ListMarker<string>(main.ctx.fx.pins, (s, i) => /*Ctx.Anonymize(s)*/ s);
+		var pinData = new ListMarker<string>(main.ctx.fx.pins, (s, i) =>
+			/*Ctx.Anonymize(s)*/
+			$"{Path.GetFileName(s)}"
+		);
 		var pinList = new ListView() {
 			Title = "Pinned",
 			BorderStyle = LineStyle.Single,
@@ -94,7 +97,7 @@ public class HomeSession {
 			},
 			['>'] = e => {
 				e.Handled = true;
-				main.folder.SwitchTab(-1);
+				main.folder.SwitchTab(1);
 			}
 		});
 		libraryTree.MouseEvD(new() {
@@ -149,7 +152,7 @@ public class HomeSession {
 			},
 			['>'] = e => {
 				e.Handled = true;
-				main.folder.SwitchTab(-1);
+				main.folder.SwitchTab(1);
 			}
 		});
 		/*

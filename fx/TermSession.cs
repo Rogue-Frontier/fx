@@ -31,6 +31,13 @@ namespace fx {
 				TreeBuilder = tree,
 				AspectGetter = tree.GetName
 			};
+			fileTree.KeyDownD(new() {
+				[':'] = e => {
+					main.FocusTerm(fileTree);
+				}
+			});
+
+
 			var cwdBar = new TextField() {
 				AutoSize = false,
 				X = 0,
@@ -62,6 +69,8 @@ namespace fx {
 			};
 
 
+
+
 			var output = new TextView() {
 				X = 32,
 				Y = 1,
@@ -73,6 +82,13 @@ namespace fx {
 				ReadOnly = true,
 				CanFocus = true
 			};
+			output.KeyDownD(new() {
+				[':'] = e => {
+					main.FocusTerm(output);
+				}
+			});
+
+
 			main.TermEnter += e => {
 				if(main.folder.currentBody != root) {
 					return;
@@ -91,20 +107,20 @@ namespace fx {
 					RedirectStandardInput = true,
 				};
 				e.term.Text = "";
-				Application.Invoke(() => {
+				Task.Run(() => {
 					using var p = Process.Start(pi);
 					p.BeginOutputReadLine();
 					p.BeginErrorReadLine();
-					p.OutputDataReceived += (_, d) => {
-						AppendLine(d.Data);
-					};
-					p.ErrorDataReceived += (_, d) => {
-						AppendLine(d.Data);
-					};
+					p.OutputDataReceived += (_, d) => AppendLine(d.Data);
+					p.ErrorDataReceived += (_, d) => AppendLine(d.Data);
 					p.StandardInput.Close();
 					p.WaitForExit();
 					p.CancelOutputRead();
 					p.CancelErrorRead();
+
+					lock(p) {
+						var dir = p.GetCurrentDirectory();
+					}
 				});
 				void AppendLine(string text) {
 					Application.Invoke(() => {

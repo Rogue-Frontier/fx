@@ -60,23 +60,25 @@ public class ExploreSession {
 	public ExploreSession (Main main, string initCwd) {
 		this.main = main;
 		this.cwd = initCwd;
+
+		int lenName = 42;
 		cwdData = new(new(), (p, i) => {
 			var localName =
-				p.local.Length <= 32 ?
+				p.local.Length <= lenName ?
 					p.local :
-					$"{p.local[..30]}..";
+					$"{p.local[..(lenName - 2)]}..";
 			if(zipRoot != null) {
 				using var z = ZipFile.OpenRead(zipRoot);
 				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
 				var e = z.GetEntry(local);
 				var size = e.Length;
 				var lastWrite = e.LastWriteTime;
-				return $"{i,3}| {localName,-32}{size,-8}{lastWrite,-16:MM/dd HH:mm}";
+				return $"{i,3}| {localName.PadRight(lenName)}{size,-8}{lastWrite,-16:MM/dd HH:mm}";
 			} else {
 
 
 				var a = File.GetLastAccessTimeUtc(p.path);
-				return $"{i,3}| {localName,-32}{GetSize(p),-8}{a,-16:MM/dd HH:mm}";
+				return $"{i,3}| {localName.PadRight(lenName)}{GetSize(p),-8}{a,-16:MM/dd HH:mm}";
 			}
 		});
 		var favData = new List<PathItem>();
@@ -129,7 +131,7 @@ public class ExploreSession {
 			X = Pos.Right(freqPane),
 			Y = 0,
 			Width = Dim.Fill(24),
-			Height = 30,
+			Height = Dim.Fill(), //30,
 		};
 		cwdChanged += s => pathPane.Title = s;
 		var filter = new TextField() {
@@ -169,10 +171,17 @@ public class ExploreSession {
 			AutoSize = false,
 			X = 7,
 			Y = 1,
-			Width = 32
+			Width = lenName
 		};
 		var sortSize = new Label() {
 			Text = "Size",
+			AutoSize = false,
+			X = Pos.Right(sortName),
+			Y = 1,
+			Width = 8
+		};
+		var sortType = new Label() {
+			Text = "Type",
 			AutoSize = false,
 			X = Pos.Right(sortName),
 			Y = 1,
@@ -204,30 +213,13 @@ public class ExploreSession {
 			Width = Dim.Percent(50),
 			Height = Dim.Fill(1),
 		};
-		var procPane = new View() {
-			Title = "Processes",
-			BorderStyle = LineStyle.Single,
-
-			X = Pos.AnchorEnd(24),
-			Y = 0,
-			Width = 24,
-			Height = Dim.Percent(50) - 1,
-		};
-		var procList = new ListView() {
-			Title = "Process List",
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill(),
-			Source = new ListMarker<WindowItem>(procData, (w, index) => $"{Path.GetFileName(w.path), -20} {w.name}"),
-		};
 		var repoPane = new View() {
 			Title = "Repository",
 			BorderStyle = LineStyle.Single,
 			X = Pos.AnchorEnd(24),
-			Y = Pos.Bottom(procPane),
+			Y = 0,
 			Width = 24,
-			Height = Dim.Percent(50),
+			Height = Dim.Fill(),
 		};
 		repoList = new ListView() {
 			Title = "Repository Items",
@@ -242,14 +234,12 @@ public class ExploreSession {
 		InitEvents();
 		InitCwd();
 		RefreshPads();
-		UpdateProcesses();
 		void InitTreeLocal () {
 			SView.InitTree(
 				[freqPane],//, freqList],
 				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortAccessed, pathList],
-				[procPane, procList],
 				[repoPane, repoList],
-				[root, addressBar, freqPane, pathPane, /*properties,*/ procPane, repoPane]
+				[root, addressBar, freqPane, pathPane, /*properties,*/ repoPane]
 				);
 		}
 		void InitEvents () {
@@ -451,6 +441,7 @@ public class ExploreSession {
 					_ => null
 				});
 			});
+			/*
 			procList.KeyDownD(new() {
 				[(int)CursorLeft] = default,
 				[(int)CursorRight] = default,
@@ -489,6 +480,7 @@ public class ExploreSession {
 					//Context menu
 				},
 			});
+			*/
 			repoList.OpenSelectedItem += (a, e) => {
 				var item = gitData[e.Item];
 				if(item.staged) Commands.Unstage(git.repo, item.local);
@@ -608,12 +600,6 @@ public class ExploreSession {
 			if(cwdData.Count > 0)
 				pathList.SelectedItem = 0;
 			pathList.SetFocus();
-		}
-		void UpdateProcesses () {
-			procData.Clear();
-			procData.AddRange(WinApi.GetOpenWindows());
-			//procList.SetSource(procData);
-			procList.SetNeedsDisplay();
 		}
 		/*
 		//void AddListenersMulti ((View view, MousePressGen MouseClick, KeyPressGen KeyPress)[] pairs) => pairs.ToList().ForEach(pair => AddListeners(pair.view, pair.MouseClick, pair.KeyPress));
@@ -922,10 +908,8 @@ public class ExploreSession {
 				new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""))
 			]
 		};
-		
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
-	//
 	/// <summary>
 	/// This should be refactored so that ctx handles path updates
 	/// </summary>

@@ -222,8 +222,11 @@ public class FindSession {
 			[(int)Esc] = _=> {
 				main.folder.RemoveTab(root, out var _);
 			},
+			['<'] = _ => {
+				main.folder.SwitchTab(-1);
+			},
 			['>'] = _ => {
-				main.folder.SwitchTab();
+				main.folder.SwitchTab(1);
 			}
 		});
 		rootBar.KeyDownD(new() {
