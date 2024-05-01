@@ -80,7 +80,11 @@ namespace fx {
 				BorderStyle = LineStyle.Single,
 
 				ReadOnly = true,
-				CanFocus = true
+				CanFocus = true,
+
+				ColorScheme = Application.Top.ColorScheme with {
+					Focus = new(Color.White, new Color(25, 25, 25))
+				}
 			};
 			output.KeyDownD(new() {
 				[':'] = e => {

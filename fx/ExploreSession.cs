@@ -800,7 +800,7 @@ public class ExploreSession {
 			};
 			yield return new MenuBarItem("Term", null, () => {
 				var session = new TermSession(main, item.path);
-				main.folder.AddTab($"Term {item.path}", session.root, true, main.root.FirstOrDefault()?.Focused);
+				main.folder.AddTab($"Term", session.root, true, main.root.FirstOrDefault()?.Focused);
 			}) {
 				Children = [
 					UseSystemTerminal(item.path),
@@ -823,7 +823,7 @@ public class ExploreSession {
 			};
 			yield return new MenuBarItem("Term parent", null, () => {
 				var session = new TermSession(main, item.path);
-				main.folder.AddTab($"Term {par}", session.root, true, main.root.FirstOrDefault()?.Focused);
+				main.folder.AddTab($"Term", session.root, true, main.root.FirstOrDefault()?.Focused);
 			}) {
 				Children = [
 					UseSystemTerminal(item.path),
