@@ -33,14 +33,11 @@ public class ExploreSession {
 	public View root;
 	private Ctx ctx => main.ctx;
 	private Fx fx => ctx.fx;
-
 	object GetName (PathItem p) => Path.GetFileName(p.path);
 	object GetLastWrite (PathItem p) => File.GetLastWriteTimeUtc(p.path);
 	object GetLastAccess (PathItem p) => File.GetLastAccessTimeUtc(p.path);
 	object GetSize (PathItem p) => p.dir ? 0 : new FileInfo(p.path).Length;
 	public record SortMode(Func<PathItem, object> f, bool reverse);
-
-
 	public Dictionary<string, int> lastIndex = new();
 	public string cwd = Environment.CurrentDirectory;
 	public LinkedList<string> cwdPrev = new();
@@ -56,42 +53,33 @@ public class ExploreSession {
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
 	private string cwdRecall = null;
-
 	Regex nameFilter = null;
-
 	Action<string> cwdChanged;
-
 	public string zipRoot;
-
 	private Main main;
 	public ExploreSession (Main main, string initCwd) {
 		this.main = main;
 		this.cwd = initCwd;
 		cwdData = new(new(), (p, i) => {
-
+			var localName = p.local.Length <= 32 ? p.local : $"{p.local[..30]}..";
 			if(zipRoot != null) {
 				using var z = ZipFile.OpenRead(zipRoot);
-
 				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
-
 				var e = z.GetEntry(local);
 				var size = e.Length;
 				var lastWrite = e.LastWriteTime;
-				return $"{i,3}| {p.local,-24}{size,-8}{lastWrite,-16:MM/dd HH:mm}";
+				return $"{i,3}| {localName,-32}{size,-8}{lastWrite,-16:MM/dd HH:mm}";
 			} else {
+
+
 				var a = File.GetLastAccessTimeUtc(p.path);
-				return $"{i,3}| {p.local,-24}{GetSize(p),-8}{a,-16:MM/dd HH:mm}";
+				return $"{i,3}| {localName,-32}{GetSize(p),-8}{a,-16:MM/dd HH:mm}";
 			}
-
-
 		});
 		var favData = new List<PathItem>();
 		var procData = new List<WindowItem>();
-
 		pathSort = new SortMode(GetLastWrite, false);
-
 		main.TermEnter += OnTermEnter;
-
 		root = new View() {
 			Title = "Root",
 			X = 0,
@@ -99,7 +87,6 @@ public class ExploreSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-
 		/*
 		addressBar = new TextField() {
 			Title = "Address",
@@ -141,7 +128,6 @@ public class ExploreSession {
 				Width = Dim.Percent(25),
 				Height = Dim.Percent(50),
 			};
-
 			var clipCutList = new ListView() {
 				Title = "Cut",
 				X = 0,
@@ -156,11 +142,9 @@ public class ExploreSession {
 				Width = Dim.Fill(),
 				Height = Dim.Fill()
 			};
-
 			//SView.InitTree([view]);
 			return view;
 		}).Value;
-
 		var pathPane = new View() {
 			//Title = "Directory",
 			BorderStyle = LineStyle.Single,
@@ -171,7 +155,6 @@ public class ExploreSession {
 			Height = 30,
 		};
 		cwdChanged += s => pathPane.Title = s;
-
 		var filter = new TextField() {
 			AutoSize = false,
 			X = 0,
@@ -191,6 +174,15 @@ public class ExploreSession {
 
 			}
 		};
+		filter.KeyDownD(new() {
+			[(int)KeyCode.Enter] = e => {
+				pathList.SetFocus();
+				if(pathList.SelectedItem == -1 && cwdData.Count > 0) {
+					pathList.SelectedItem = 0;
+				}
+			}
+		});
+
 		goPrev = new Label() { Title = "[<---]", X = Pos.AnchorEnd(24), TabStop = false };
 		goNext = new Label() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
 		goLeft = new Label() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
@@ -200,7 +192,7 @@ public class ExploreSession {
 			AutoSize = false,
 			X = 7,
 			Y = 1,
-			Width = 24
+			Width = 32
 		};
 		var sortSize = new Label() {
 			Text = "Size",
@@ -226,6 +218,7 @@ public class ExploreSession {
 			AllowsMarking = true,
 			Source = cwdData,
 			HasFocus = true,
+			SelectedItem = 1
 		};
 		var properties = new FrameView() {
 			Title = "Properties",
@@ -332,6 +325,10 @@ public class ExploreSession {
 			};
 			pathList.MouseEvD(new() {
 				[(int)Button1Pressed] = e => {
+
+					if(cwdData.Count == 0) {
+						return;
+					}
 					var i = pathList.TopItem + e.MouseEvent.Y;
 					if(i >= cwdData.Count)
 						return;
@@ -632,6 +629,9 @@ public class ExploreSession {
 		}
 		void InitCwd () {
 			SetCwd(cwd);
+			if(cwdData.Count > 0)
+				pathList.SelectedItem = 0;
+			pathList.SetFocus();
 		}
 		void UpdateProcesses () {
 			procData.Clear();
@@ -663,7 +663,12 @@ public class ExploreSession {
 		}
 
 		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
-			if(!TryGoPath(Path.GetFullPath(Path.Combine(cwd, dest)))) {
+			dest = Environment.ExpandEnvironmentVariables(dest);
+			if(!Path.IsPathRooted(dest)) {
+				dest = Path.GetFullPath(Path.Combine(cwd, dest));
+			}
+			
+			if(!TryGoPath(dest)) {
 			}
 			goto Handled;
 		}
@@ -901,30 +906,42 @@ public class ExploreSession {
 			})
 		]);
 		var pins = main.ctx.fx.pins;
-		var pin = pins.Contains(item.path);
-		yield return new MenuItem(pin ? "Unpin" : "Pin", null, () =>
-			((Action<string>)(pin ? p => pins.Remove(p) : pins.Add))(item.path)
+		var isPin = pins.Contains(item.path);
+		yield return new MenuItem(isPin ? "Unpin" : "Pin", null, () =>
+			((Action<string>)(isPin ? p => pins.Remove(p) : pins.Add))(item.path)
 			);
 		var locked = main.ctx.fx.locked;
 		var isLocked = locked.Contains(item.path);
 		yield return new MenuItem(isLocked ? "Unlock" : "Lock", null, () =>
 			((Func<string, bool>)(isLocked ? locked.Remove : locked.Add))(item.path)
 		);
+		var hidden = main.ctx.fx.hidden;
+		var isHidden = hidden.Contains(item.path);
+		yield return new MenuItem(isHidden ? "Unhide" : "Hide", null, () => {
+			((Func<string, bool>)(isHidden ? hidden.Remove : hidden.Add))(item.path);
+			main.FilesChanged([item.path]);
+		});
 		if(item.HasProp(IS_DIRECTORY)) {
 			//yield return new MenuItem("Open in System", "", () => RunCmd($"explorer.exe {item.path}"));
-			yield return new MenuItem("Delete", null, () => {
+			yield return new MenuItem("Delete Dir", null, () => {
 				if(RequestConfirm($"Delete {item.path}")) {
 					Directory.Delete(item.path);
+					main.FilesChanged([item.path]);
 				}
 			});
 		} else {
-			yield return new MenuItem("Delete", null, () => {
+			yield return new MenuItem("Delete File", null, () => {
 				if(RequestConfirm($"Delete {item.path}")) {
 					File.Delete(item.path);
+					main.FilesChanged([item.path]);
 				}
 			});
 		}
-		yield return new MenuItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path));
+		yield return new MenuBarItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path)) {
+			Children = [
+				new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""))
+			]
+		};
 		
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
@@ -1218,27 +1235,48 @@ public class ExploreSession {
 	}
 	void RefreshDirListing (string s) {
 		try {
-			PathItem transform(PathItem item) {
+			PathItem transform (PathItem item) {
 				var path = item.path;
-				while(Directory.Exists(path) && Directory.GetFileSystemEntries(path) is [string sub]) {
-					path = sub;
+				try {
+					while(Directory.Exists(path) && Directory.GetFileSystemEntries(path) is [string sub])
+						path = sub;
+				} catch(UnauthorizedAccessException e) {
+					return null;
 				}
 				var l = Path.GetDirectoryName(item.path).Length + 1;
-				return new PathItem(path[l..], path, [..GetProps(path)]);
+				return new PathItem(path[l..], path, [.. GetProps(path)]);
 			}
 			cwdData.list.Clear();
 
-			var results = Directory.GetDirectories(s)
-				.Select(GetPathItem)
-				.Select(transform)
-				.OrderPath(pathSort)
-				.Concat(
-					Directory.GetFiles(s)
-						.Select(GetPathItem)
-						.OrderPath(pathSort)
-					);
+			var up = new Lazy<PathItem>(() => {
+				return Path.GetDirectoryName(s) is { } u ? new PathItem("..", u, [.. GetProps(u)]) : null;
+			}).Value;
+
+			var upper = up == null ? null : new PathItem("../..", Path.GetDirectoryName(up.path), []);
+			while(upper is { path:{ }path } && Directory.GetFileSystemEntries(path) is [{ } sub] && Path.GetDirectoryName(path) is { }next) {
+				upper = new PathItem($"{upper.local}/..", next, []);
+			}
+			if(upper != null) {
+				upper = upper with { propSet = [.. GetProps(upper.path)] };
+			}
+			PathItem[] items = [
+				up,
+				upper,
+				..Directory.GetDirectories(s)
+					.Select(GetPathItem)
+					.Select(transform)
+					.Except([null])
+					.OrderPath(pathSort),
+
+				..Directory.GetFiles(s)
+					.Select(GetPathItem)
+					.OrderPath(pathSort)
+					];
+			var results = items
+				.Except([null])
+				.Where(p => !main.ctx.fx.hidden.Contains(p.path));
 			if(nameFilter is { } nf)
-				results = results.Where(p => nf.IsMatch(p.local));
+				results = [..results.Where(p => nf.IsMatch(p.local))];
 			cwdData.list.AddRange(results);
 		}catch(UnauthorizedAccessException e) {
 		}

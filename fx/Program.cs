@@ -44,6 +44,19 @@ using static fx.ExploreSession;
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
 
+bool expl = true;
+if(args is [string cwd]) {
+	Environment.CurrentDirectory = cwd;
+	expl = true;
+
+}
+#if false
+foreach(var a in args) {
+	Console.WriteLine(a);
+}
+Console.WriteLine($"cwd: {Environment.CurrentDirectory}");
+Console.ReadLine();
+#endif
 
 Run:
 
@@ -56,8 +69,8 @@ try {
 	};
 	
 	Application.Top.Add(main.root);
-
-
+	if(expl)
+		main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
 
 	Application.Run();	
 } catch (Exception e){
@@ -111,7 +124,7 @@ public class Main {
 	public Folder folder;
 	public bool readProc = false;
 	public event Action<TermEvent> TermEnter = default;
-	public event Action<string[]> FilesChanged = default;
+	public Action<string[]> FilesChanged = _ => { };
 	public void ReadProc(Process proc) {
 		//TerminalView.cs
 	}
@@ -309,11 +322,13 @@ public record Fx {
 	public static string SAVE_PATH { get; } =
 		$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/state.yaml";
 	public const string		WORK_ROOT = "%WORKROOT%";
-	public HashSet<string>	locked =	new();
-	public List<string>		pins =	new();
-	public string			workroot =	null; //move to ExplorerSession
+
+	public HashSet<string> hidden = new();
+	public HashSet<string> locked = new();
+	public List<string> pins = new();
+	public string workroot = null; //move to ExplorerSession
 	//public List<OAuth> accounts;
-	public List<Library>	libraryData = new();
+	public List<Library> libraryData = new();
 	public Fx () { }
 	public Fx (Ctx ctx) =>	Load(ctx);
 	public void Load (Ctx ctx) {
@@ -345,6 +360,8 @@ public record Ctx {
 	public Sln sln;
 	public Fx fx = new();
 	public ConcurrentDictionary<string, PathItem> pathData = new();
+
+
 	public Ctx () =>
 		ResetCommands();
 	public void Load () =>
@@ -356,7 +373,7 @@ public record Ctx {
 	public void ResetCommands () {
 		var dir = Command.EXECUTABLES_DIR;
 		Directory.CreateDirectory(dir);
-		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{dir}.yaml"));
+		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"D:/fx/fx/{dir}.yaml"));
 		foreach((var name, var path) in executables) {
 			File.WriteAllText($"{dir}/{name}", path);
 		}
