@@ -61,7 +61,10 @@ public class ExploreSession {
 		this.main = main;
 		this.cwd = initCwd;
 		cwdData = new(new(), (p, i) => {
-			var localName = p.local.Length <= 32 ? p.local : $"{p.local[..30]}..";
+			var localName =
+				p.local.Length <= 32 ?
+					p.local :
+					$"{p.local[..30]}..";
 			if(zipRoot != null) {
 				using var z = ZipFile.OpenRead(zipRoot);
 				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
@@ -108,8 +111,8 @@ public class ExploreSession {
 			BorderStyle= LineStyle.Single,
 			X = 0,
 			Y = 0,
-			Width = Dim.Percent(25),
-			Height = Dim.Percent(50) - 1,
+			Width = 24,
+			Height = Dim.Fill()
 		};
 		var freqList = new ListView() {
 			Title = "Recents List",
@@ -119,39 +122,13 @@ public class ExploreSession {
 			Height = Dim.Fill(),
 			Source= new ListWrapper(new List<string>())
 		};
-		var clipPane = new Lazy<View>(() => {
-			var view = new View() {
-				Title = "Clipboard",
-				BorderStyle = LineStyle.Single,
-				X = 0,
-				Y = Pos.Bottom(freqPane),
-				Width = Dim.Percent(25),
-				Height = Dim.Percent(50),
-			};
-			var clipCutList = new ListView() {
-				Title = "Cut",
-				X = 0,
-				Y = 0,
-				Width = Dim.Fill(),
-				Height = Dim.Fill()
-			};
-			var clipHistList = new ListView() {
-				Title = "History",
-				X = 0,
-				Y = 0,
-				Width = Dim.Fill(),
-				Height = Dim.Fill()
-			};
-			//SView.InitTree([view]);
-			return view;
-		}).Value;
 		var pathPane = new View() {
 			//Title = "Directory",
 			BorderStyle = LineStyle.Single,
 
-			X = Pos.Percent(25),
+			X = Pos.Right(freqPane),
 			Y = 0,
-			Width = Dim.Percent(50),
+			Width = Dim.Fill(24),
 			Height = 30,
 		};
 		cwdChanged += s => pathPane.Title = s;
@@ -231,9 +208,9 @@ public class ExploreSession {
 			Title = "Processes",
 			BorderStyle = LineStyle.Single,
 
-			X = Pos.Percent(75),
+			X = Pos.AnchorEnd(24),
 			Y = 0,
-			Width = Dim.Percent(25),
+			Width = 24,
 			Height = Dim.Percent(50) - 1,
 		};
 		var procList = new ListView() {
@@ -247,9 +224,9 @@ public class ExploreSession {
 		var repoPane = new View() {
 			Title = "Repository",
 			BorderStyle = LineStyle.Single,
-			X = Pos.Percent(75),
+			X = Pos.AnchorEnd(24),
 			Y = Pos.Bottom(procPane),
-			Width = Dim.Percent(25),
+			Width = 24,
 			Height = Dim.Percent(50),
 		};
 		repoList = new ListView() {
@@ -269,11 +246,10 @@ public class ExploreSession {
 		void InitTreeLocal () {
 			SView.InitTree(
 				[freqPane],//, freqList],
-				[clipPane],
 				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortAccessed, pathList],
 				[procPane, procList],
 				[repoPane, repoList],
-				[root, addressBar, freqPane, clipPane, pathPane, /*properties,*/ procPane, repoPane]
+				[root, addressBar, freqPane, pathPane, /*properties,*/ procPane, repoPane]
 				);
 		}
 		void InitEvents () {
@@ -778,11 +754,15 @@ public class ExploreSession {
 		if(Path.GetDirectoryName(path) is { } par && HasRepo(GetPathItem(par), out var root)) {
 			yield return IN_REPOSITORY.Make(CalcRepoItem(root, path));
 		}
-		if(gitMap.TryGetValue(path, out var p)) {
-			if(p.staged) {
-				yield return IS_STAGED;
-			} else {
-				yield return IS_UNSTAGED;
+
+
+		if(gitMap.Any()) {
+			if(gitMap.TryGetValue(path, out var p)) {
+				if(p.staged) {
+					yield return IS_STAGED;
+				} else {
+					yield return IS_UNSTAGED;
+				}
 			}
 		}
 	}
@@ -1236,15 +1216,18 @@ public class ExploreSession {
 	void RefreshDirListing (string s) {
 		try {
 			PathItem transform (PathItem item) {
-				var path = item.path;
+				var path = Path.GetFullPath(item.path);
 				try {
 					while(Directory.Exists(path) && Directory.GetFileSystemEntries(path) is [string sub])
 						path = sub;
 				} catch(UnauthorizedAccessException e) {
 					return null;
 				}
+				if(item.path == path) return item;
+
+
 				var l = Path.GetDirectoryName(item.path).Length + 1;
-				return new PathItem(path[l..], path, [.. GetProps(path)]);
+				return new PathItem(path[l..].Replace("\\", "/"), path, [.. GetProps(path)]);
 			}
 			cwdData.list.Clear();
 
@@ -1252,13 +1235,19 @@ public class ExploreSession {
 				return Path.GetDirectoryName(s) is { } u ? new PathItem("..", u, [.. GetProps(u)]) : null;
 			}).Value;
 
-			var upper = up == null ? null : new PathItem("../..", Path.GetDirectoryName(up.path), []);
-			while(upper is { path:{ }path } && Directory.GetFileSystemEntries(path) is [{ } sub] && Path.GetDirectoryName(path) is { }next) {
-				upper = new PathItem($"{upper.local}/..", next, []);
-			}
-			if(upper != null) {
-				upper = upper with { propSet = [.. GetProps(upper.path)] };
-			}
+			var upper = new Lazy<PathItem>(() => {
+				
+				
+				var item = new PathItem("../..", Path.GetDirectoryName(up?.path), []);
+				if(item is { path: { }p } && Directory.GetFileSystemEntries(p) is { Length: 1 }) {
+					while(Directory.GetFileSystemEntries(item.path) is { Length:1} && Path.GetDirectoryName(item.path) is { } next)
+						item = new PathItem($"{item.local}/..", next, []);
+					return item with { propSet = [.. GetProps(p)] };
+				}
+
+				return null;
+			}).Value;
+			
 			PathItem[] items = [
 				up,
 				upper,
@@ -1271,13 +1260,14 @@ public class ExploreSession {
 				..Directory.GetFiles(s)
 					.Select(GetPathItem)
 					.OrderPath(pathSort)
-					];
+			];
 			var results = items
 				.Except([null])
 				.Where(p => !main.ctx.fx.hidden.Contains(p.path));
 			if(nameFilter is { } nf)
 				results = [..results.Where(p => nf.IsMatch(p.local))];
-			cwdData.list.AddRange(results);
+			items = [.. results];
+			cwdData.list.AddRange(items);
 		}catch(UnauthorizedAccessException e) {
 		}
 	}
