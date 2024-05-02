@@ -109,11 +109,22 @@ public class ExploreSession {
 				Focus = new(Color.White, new Color(31, 31, 31))
 			}
 		};
+
+		CancellationTokenSource filterCancel = null;
 		filter.TextChanged += (a, e) => {
 			try {
-				nameFilter = new Regex(e.NewValue);
-				RefreshDirListing(cwd);
-				pathList.SetNeedsDisplay();
+
+				if(e.NewValue is { Length:0} or null) {
+					nameFilter = null;
+				} else {
+					nameFilter = new Regex(e.NewValue);
+				}
+				filterCancel?.Cancel();
+				filterCancel = new();
+				Task.Run(() => {
+					RefreshDirListing(cwd);
+					pathList.SetNeedsDisplay();
+				}, filterCancel.Token);
 			} catch {
 
 			}
@@ -727,12 +738,15 @@ public class ExploreSession {
 		var cmd = e.text;
 		//Replace {0} with the first marked path
 		string[] args = cwdData.list.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
-		if(args.Any()) {
-			cmd = string.Format(cmd, args);
+		if(!args.Any()) {
+			args = [.. cwdData.list.Select(p => p.local)];
 		} else {
 			//cmd = string.Format(cmd, cwdData[pathList.SelectedItem].local);
-			cmd = string.Format(cmd, [..cwdData.list.Select(p => p.local)]);
 		}
+		cmd = string.Format(cmd, args);
+
+		cmd = cmd.Replace("%this%", cwdData.list[pathList.SelectedItem].local);
+		//cmd = cmd.Replace("%all%", string.Join(" ", args));
 
 		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
 			dest = Environment.ExpandEnvironmentVariables(dest);
@@ -1339,16 +1353,29 @@ public class ExploreSession {
 					}
 					return null;
 				}).Value;
+
+				Func<PathItem, bool>? f =
+					nameFilter is { } nf ?
+						s => nf.IsMatch(s.local) :
+						null;
+
 				PathItem[] items = [
 					up, upper,
-					..Directory.GetDirectories(s).Select(GetPathItem).Select(transform).Except([null]).OrderPath(pathSort),
-					..Directory.GetFiles(s).Select(GetPathItem).OrderPath(pathSort)
+					..Directory.GetDirectories(s)
+						.Except(main.ctx.fx.hidden)
+						
+						.Select(GetPathItem)
+						.Select(transform)
+						.Except([null])
+						.MaybeWhere(f)
+						.OrderPath(pathSort),
+					..Directory.GetFiles(s)
+						.Except(main.ctx.fx.hidden)
+						.Select(GetPathItem)
+						.MaybeWhere(f)
+						.OrderPath(pathSort)
 				];
-				var results = items.Except([null]).Where(p => !main.ctx.fx.hidden.Contains(p.path));
-				if(nameFilter is { } nf)
-					results = [.. results.Where(p => nf.IsMatch(p.local))];
-				items = [.. results];
-				cwdData.list.AddRange(items);
+				cwdData.list.AddRange(items.Except([null]));
 			}
 		}catch(UnauthorizedAccessException e) {
 		}

@@ -414,6 +414,11 @@ public record Ctx {
 }
 public static class SView {
 
+
+	public static IEnumerable<T> MaybeWhere<T>(this IEnumerable<T> e, Func<T, bool>? f) {
+		return f == null ? e : e.Where(f);
+	}
+
 	public static IEnumerable<PathItem> OrderPath(this IEnumerable<PathItem> e, SortMode s) =>
 		s.reverse ?
 			e.OrderByDescending(s.f) :
