@@ -1,5 +1,10 @@
 # fx
-File explorer with various integrated features for optimal convenience.
+File explorer with various integrated features for highest convenience.
+
+- Windows Explorer
+- Command Prompt
+- Notepad
+- 
 
 # Features
 - Property system
