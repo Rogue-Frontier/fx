@@ -17,79 +17,48 @@ public class HomeSession {
 	private Ctx ctx;
 	public HomeSession(Main main) {
 		ctx = main.ctx;
-		List<Library> libraryData = main.ctx.fx.libraryData;
 		root = new View() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 		};
-		var FILL = Dim.Fill();
-		var w = Dim.Percent(25);
-		//Libraries
-		var libraryTree = new TreeView<ILibraryTree>() {
-			Title = "Libraries",
+
+		var tree = new QuickAccessTree();
+		var quickAccess = new TreeView<IFileTree>() {
+			Title = "Quick Access",
 			BorderStyle = LineStyle.Single,
 			X = 0,
 			Y = 0,
-			Width = w,
-			Height = FILL,
-			TreeBuilder = new LibraryFinder(),
-			AspectGetter = node => node switch {
-				Library lib => lib.name,
-				LibraryItem item => item.name,
-				LibraryLeaf leaf => leaf.name,
-				_ => "Node"
+			Width = 48,
+			Height = Dim.Fill(),
+			TreeBuilder = tree,
+			AspectGetter = tree.AspectGetter
+		};
+
+		quickAccess.AddObjects(tree.GetRoots(main));
+		foreach(var t in quickAccess.Objects)
+			quickAccess.Expand(t);
+		quickAccess.ObjectActivated += (o, e) => {
+			if(e.ActivatedObject is IFilePath item) {
+				main.folder.AddTab("Expl", new ExploreSession(main, item.path).root, true);
 			}
 		};
-		//Pinned folders, pinned files
-		var pinData = new ListMarker<string>(main.ctx.fx.pins, (s, i) =>
-			/*Ctx.Anonymize(s)*/
-			$"{Path.GetFileName(s)}"
-		);
-		var pinList = new ListView() {
-			Title = "Pinned",
-			BorderStyle = LineStyle.Single,
-			X = Pos.Right(libraryTree),
-			Y = 0,
-			Width = w,
-			Height = FILL,
-			Source = pinData
-		};
-		var recentList = new ListView() {
-			Title = "Recent",
-			BorderStyle = LineStyle.Single,
-			X = Pos.Right(pinList),
-			Y =0,
-			Width = w,
-			Height = FILL,
-			Source=  new ListWrapper(new List<string>())
-		};
-		var repoList = new ListView() {
-			Title = "Repositories",
-			BorderStyle = LineStyle.Single,
-			X = Pos.Right(recentList),
-			Y = 0,
-			Width = w,
-			Height = FILL,
-			Source=  new ListWrapper(new List<GitItem>())
-		};
-		libraryTree.AddObjects(libraryData);
-		libraryTree.KeyDownD(value: new() {
+		quickAccess.KeyDownD(value: new() {
 			['"'] = _ => {
-				if(libraryTree.SelectedObject is ILibraryPath item && File.Exists(item.path)) {
+				if(quickAccess.SelectedObject is IFilePath item && File.Exists(item.path)) {
 					ExploreSession.Preview($"Preview: {item.path}", File.ReadAllText(item.path));
 				}
 			},
 			['?'] = _ => {
-				if(libraryTree.SelectedObject is ILibraryPath item) {
+				if(quickAccess.SelectedObject is IFilePath item) {
 					ExploreSession.ShowProperties(ctx.GetPathItem(item.path, ExploreSession.GetStaticProps));
 				}
 			},
 			['/'] = _ => {
-				var rowObj = libraryTree.SelectedObject;
-				var (row, col) = libraryTree.GetObjectPos(rowObj) ?? (0, 0);
-				SView.ShowContext(libraryTree, [.. GetSpecificActions(row, rowObj)], row + 2, col + 2);
+				var rowObj = quickAccess.SelectedObject;
+				var (row, col) = quickAccess.GetObjectPos(rowObj) ?? (0, 0);
+				SView.ShowContext(quickAccess, [.. GetSpecificActions(quickAccess, main, row, rowObj)], row + 2, col + 2);
 			},
 			['<'] = e => {
 				e.Handled = true;
@@ -100,20 +69,20 @@ public class HomeSession {
 				main.folder.SwitchTab(1);
 			}
 		});
-		libraryTree.MouseEvD(new() {
+		quickAccess.MouseEvD(new() {
 			[(int)Button3Pressed] = e => {
-				var prevObj = libraryTree.SelectedObject;
+				var prevObj = quickAccess.SelectedObject;
 				var y = e.MouseEvent.Y;
-				var row = y + libraryTree.ScrollOffsetVertical;
-				var rowObj = libraryTree.GetObjectOnRow(row);
-				var c = SView.ShowContext(libraryTree, [.. GetSpecificActions(row, rowObj)], y, e.MouseEvent.X);
-				if(row < libraryData.Count) {
+				var row = y + quickAccess.ScrollOffsetVertical;
+				var rowObj = quickAccess.GetObjectOnRow(row);
+				var c = SView.ShowContext(quickAccess, [.. GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.X);
+				if(row < main.ctx.fx.libraryData.Count) {
 					c.MenuBar.MenuAllClosed += (a, e) => {
-						if(libraryData.Count == 0) {
+						if(main.ctx.fx.libraryData.Count == 0) {
 							return;
 						}
-						if(libraryTree.GetParent(prevObj) != null) {
-							libraryTree.SelectedObject = prevObj;
+						if(quickAccess.GetParent(prevObj) != null) {
+							quickAccess.SelectedObject = prevObj;
 						} else {
 							//TODO: Find suitable dest
 						}
@@ -122,7 +91,7 @@ public class HomeSession {
 				e.Handled = true;
 			}
 		});
-
+		/*
 		pinList.OpenSelectedItem += (a, e) => {
 			main.folder.AddTab("Expl", new ExploreSession(main, pinData.list[pinList.SelectedItem]).root, true);
 		};
@@ -155,6 +124,7 @@ public class HomeSession {
 				main.folder.SwitchTab(1);
 			}
 		});
+		*/
 		/*
 
 					'"' => () => {
@@ -172,6 +142,7 @@ public class HomeSession {
 						var c = ShowContext(p, ind - pathList.TopItem + 2, 2);
 					}
 		*/
+		/*
 		pinList.MouseEvD(new() {
 			[(int)Button3Pressed] = e => {
 				var prev = pinList.SelectedItem;
@@ -181,7 +152,7 @@ public class HomeSession {
 					return;
 				}
 				pinList.SelectedItem = i;
-				var c = SView.ShowContext(libraryTree, [
+				var c = SView.ShowContext(quickAccess, [
 					new MenuItem("Cancel", null, () => { }),
 					.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(pinData.list[i], ExploreSession.GetStaticProps))
 					], e.MouseEvent.Y - 1, e.MouseEvent.ScreenPosition.X - 1);
@@ -194,96 +165,142 @@ public class HomeSession {
 				e.Handled = true;
 			}
 		});
+		*/
 		SView.InitTree(
-			[[root, libraryTree, pinList, recentList, repoList]]
+			[[root, quickAccess, /*pinList, recentList, repoList*/]]
 			);
-		//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
-		IEnumerable<MenuItem> GetSpecificActions (int row, ILibraryTree obj) {
-			var path = ((obj as LibraryItem)?.path ?? (obj as LibraryLeaf)?.path);
-			var pathItem = path == null ? null : ctx.GetPathItem(path, ExploreSession.GetStaticProps);
-			return [
-				new MenuItem("Cancel", null, () => { }),
+		
+	}
+	//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
+	public static IEnumerable<MenuItem> GetSpecificActions (TreeView<IFileTree> quickAccess, Main main, int row, IFileTree obj) {
+		var path = obj switch {
+			LibraryItem li => li.path,
+			LibraryLeaf ll => ll.path,
+			PinItem pi => pi.path
+		};
+
+		var pathItem = path == null ? null : main.ctx.GetPathItem(path, ExploreSession.GetStaticProps);
+		return [
+			new MenuItem("Cancel", null, () => { }),
 				..(obj switch {
-						Library lib => GetActions(lib),
+						LibraryRoot lib => GetRootActions(lib),
 						LibraryItem item => GetItemActions(item),
 						LibraryLeaf node => GetNodeActions(node),
+
+						PinItem pi => GetPinActions(pi),
 						_ => GetActionsNone()
 					})
-				];
-			IEnumerable<MenuItem> GetActions (Library lib) {
-				yield return new MenuItem("Delete", null, () => {
-					var rem = libraryData[row];
-					libraryData.RemoveAt(row);
-					libraryTree.Remove(rem);
-					libraryTree.SetNeedsDisplay();
-				});
-				yield return new MenuItem("Rename", null, () => ExploreSession.RequestName($"Rename {lib.name}", name => {
-					if(name.Any()) {
-						lib.name = name;
-						return true;
-					}
-					return false;
-				}));
-			}
-			IEnumerable<MenuItem> GetItemActions (LibraryItem item) {
-				foreach(var it in GetPathActions(item.path)) yield return it;
-				yield return new MenuItem("Remove from Library", null, () => {
-					var lib = libraryTree.GetParent(item) as Library;
-					lib.links.Remove(item);
-					libraryTree.Remove(item);
-				});
-			}
-			IEnumerable<MenuItem> GetNodeActions (LibraryLeaf node) {
-				foreach(var it in GetPathActions(node.path)) yield return it;
-				yield return new MenuItem("Hide", null, () => {
+			];
+		IEnumerable<MenuItem> GetRootActions (LibraryRoot lib) {
+			yield return new MenuItem("Delete", null, () => {
+				var rem = main.ctx.fx.libraryData[row];
+				main.ctx.fx.libraryData.RemoveAt(row);
+				quickAccess.Remove(rem);
+				quickAccess.SetNeedsDisplay();
+			});
+			yield return new MenuItem("Rename", null, () => ExploreSession.RequestName($"Rename {lib.name}", name => {
+				if(name.Any()) {
+					lib.name = name;
+					return true;
+				}
+				return false;
+			}));
+		}
+		IEnumerable<MenuItem> GetItemActions (LibraryItem item) {
+			foreach(var it in GetPathActions(item.path)) yield return it;
+			yield return new MenuItem("Remove from Library", null, () => {
+				var lib = quickAccess.GetParent(item) as LibraryRoot;
+				lib.links.Remove(item);
+				quickAccess.Remove(item);
+			});
+		}
+		IEnumerable<MenuItem> GetNodeActions (LibraryLeaf node) {
+			foreach(var it in GetPathActions(node.path)) yield return it;
+			yield return new MenuItem("Hide", null, () => {
 
+			});
+		}
+		IEnumerable<MenuItem> GetPinActions (PinItem pi) {
+			foreach(var it in GetPathActions(pi.path)) yield return it;
+		}
+		IEnumerable<MenuItem> GetPathActions (string path) {
+			var pathItem = main.ctx.GetPathItem(path, ExploreSession.GetStaticProps);
+			foreach(var c in main.ctx.GetCommands(pathItem)) yield return c;
+			foreach(var c in ExploreSession.GetStaticActions(main, pathItem)) yield return c;
+		}
+		IEnumerable<MenuItem> GetActionsNone () {
+			yield return new MenuItem("New Library", null, () => {
+				ExploreSession.RequestName("New Library", name => {
+					var add = new LibraryRoot(name);
+					main.ctx.fx.libraryData.Add(add);
+					quickAccess.AddObject(add);
+					quickAccess.SetNeedsDisplay();
+					return true;
 				});
-			}
-			IEnumerable<MenuItem> GetPathActions(string path) {
-				var pathItem = ctx.GetPathItem(path, ExploreSession.GetStaticProps);
-				foreach(var c in ctx.GetCommands(pathItem)) yield return c;
-				foreach(var c in ExploreSession.GetStaticActions(main, pathItem)) yield return c;
-			}
-			IEnumerable<MenuItem> GetActionsNone () {
-				yield return new MenuItem("New Library", null, () => {
-					ExploreSession.RequestName("New Library", name => {
-						var add = new Library(name);
-						libraryData.Add(add);
-						libraryTree.AddObject(add);
-						libraryTree.SetNeedsDisplay();
-						return true;
-					});
-				});
-			}
+			});
 		}
 	}
 }
-public record LibraryFinder : ITreeBuilder<ILibraryTree> {
+public record QuickAccessTree : ITreeBuilder<IFileTree> {
+
+	public IEnumerable<IFileTree> GetRoots (Main main) {
+		List<LibraryRoot> libraryData = main.ctx.fx.libraryData;
+		List<string> pinData = main.ctx.fx.pins;
+		return [
+			new TreeRoot("Libraries", [.. libraryData]),
+			new TreeRoot("Pins", [.. pinData.Select(path => new PinItem(path))]),
+			new TreeRoot("Drives", [
+				..DriveInfo.GetDrives().Select(d => new LibraryItem(d.Name, true))
+			]),
+			new TreeRoot("Recent", [
+				..main.ctx.fx.lastOpened.OrderBy(p => p.Value).Select(p => new RecentItem(p.Key, p.Value))
+			])
+		];
+	}
+
+	public AspectGetterDelegate<IFileTree> AspectGetter = node => node switch {
+		TreeRoot root => root.name,
+		LibraryRoot lib => lib.name,
+		LibraryItem item => item.name,
+		LibraryLeaf leaf => leaf.name,
+		PinItem pin => Path.GetFileName(pin.path),
+		RecentItem rec => rec.name,
+		_ => "Node"
+	};
 	public bool SupportsCanExpand => true;
-	public bool CanExpand (ILibraryTree i) => GetChildren(i).Any();
-	public IEnumerable<ILibraryTree> GetChildren (ILibraryTree i) => i switch {
-		Library lib => lib.links,
+	public bool CanExpand (IFileTree i) => GetChildren(i).Any();
+	public IEnumerable<IFileTree> GetChildren (IFileTree i) => i switch {
+		TreeRoot root => root.items,
+		LibraryRoot lib => lib.links,
 		LibraryItem item when Directory.Exists(item.path) => GetLeaves(item.path),
 		LibraryLeaf leaf when Directory.Exists(leaf.path) => GetLeaves(leaf.path),
+		PinItem pi => [],
 		_ => []
 	};
 	public IEnumerable<LibraryLeaf> GetLeaves(string path) =>
 		Directory.GetDirectories(path).Concat(Directory.GetFiles(path)).Select(path => new LibraryLeaf(path));
 }
-public interface ILibraryTree { }
-public interface  ILibraryPath {
+public interface IFileTree { }
+public interface  IFilePath {
     string path { get; }
 }
-public record Library() : ILibraryTree {
+public record TreeRoot (string name, IFileTree[] items) : IFileTree { }
+public record PinItem(string path) : IFileTree, IFilePath {}
+
+public record RecentItem (string path, DateTime lastAccess) : IFileTree, IFilePath {
+
+	public string name = Path.GetDirectoryName(path) is { } ? Path.GetFileName(path) : path;
+}
+public record LibraryRoot() : IFileTree {
 	public string name;
 	public List<LibraryItem> links = new();
-	public Library (string name) : this() { this.name = name; }
+	public LibraryRoot (string name) : this() { this.name = name; }
 }
-public record LibraryItem (string path, bool visible) : ILibraryTree, ILibraryPath {
-	public string name = Path.GetFileName(path);
+public record LibraryItem (string path, bool visible) : IFileTree, IFilePath {
+	public string name = Path.GetDirectoryName(path) is { } ? Path.GetFileName(path) : path;
 	public LibraryItem () : this(null, false) { }
 }
-public record LibraryLeaf (string path) : ILibraryTree, ILibraryPath {
+public record LibraryLeaf (string path) : IFileTree, IFilePath {
 	public string name = Path.GetFileName(path);
 }
 public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : IListDataSource where T:class {

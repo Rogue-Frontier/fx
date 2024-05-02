@@ -33,7 +33,7 @@ public static class Props {
 	public static IPropGen
 		IN_REPOSITORY = new PropGen<RepoItem>("gitRepositoryItem",	pair => $"In Repository: {pair.root}"),
 		IS_LINK_TO = new PropGen<string>("link",					dest => $"Link To: {dest}"),
-		IN_LIBRARY = new PropGen<Library>("libraryItem",			library => $"In Library: {library.name}"),
+		IN_LIBRARY = new PropGen<LibraryRoot>("libraryItem",			library => $"In Library: {library.name}"),
 		IN_SOLUTION = new PropGen<string>("solutionItem",			slnPath => $"In Solution: {slnPath}"),
 		IN_ZIP = new PropGen<string>("zipItem",						zipRoot =>	$"In Zip: {zipRoot}");
 	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");

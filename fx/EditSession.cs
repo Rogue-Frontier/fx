@@ -50,6 +50,14 @@ public class EditSession {
 		};
 		*/
 
+		var pane = new View() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(),
+			BorderStyle = LineStyle.Single
+		};
+
 		var mode = new Label() {
 			AutoSize = false,
 			X = Pos.AnchorEnd(4),
@@ -105,8 +113,6 @@ public class EditSession {
 			prevTopRow = textView.TopRow;
 			RefreshLines();
 		};
-
-
 		main.TermEnter += e => {
 			if(main.folder.currentBody == root) {
 				var replace = new {
@@ -167,6 +173,15 @@ public class EditSession {
 					textView.ReadOnly = true;
 					RefreshMode();
 				}
+			},
+
+			['F' | (int)CtrlMask] = e => {
+				//Find
+				return;
+			},
+			['R' | (int)CtrlMask] = e => {
+				//Replace
+				return;
 			},
 			/*
 			['S'] = e => {
@@ -246,6 +261,7 @@ public class EditSession {
 			},
 		});
 		textView.CursorPosition = new(col, row);
-		SView.InitTree([root, address, mode, /* save, */lineNumbers, textView]);
+		SView.InitTree([pane, address, mode, /* save, */lineNumbers, textView]);
+		SView.InitTree([root, pane]);
 	}
 }

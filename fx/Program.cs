@@ -325,10 +325,13 @@ public record Fx {
 
 	public HashSet<string> hidden = new();
 	public HashSet<string> locked = new();
+	public ConcurrentDictionary<string, int> timesOpened = new();
+	public Dictionary<string, DateTime> lastOpened = new();
+
 	public List<string> pins = new();
 	public string workroot = null; //move to ExplorerSession
 	//public List<OAuth> accounts;
-	public List<Library> libraryData = new();
+	public List<LibraryRoot> libraryData = new();
 	public Fx () { }
 	public Fx (Ctx ctx) =>	Load(ctx);
 	public void Load (Ctx ctx) {
