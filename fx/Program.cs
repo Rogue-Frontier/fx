@@ -380,7 +380,7 @@ public record Ctx {
 		foreach((var name, var path) in executables) {
 			File.WriteAllText($"{dir}/{name}", path);
 		}
-		Commands = de.Deserialize<Command[]>(File.ReadAllText("D:/fx/fx/Commands.yaml"));
+		Commands = de.Deserialize<Command[]>(File.ReadAllText("D:/fx/fx/commands.yaml"));
 	}
 	public IEnumerable<MenuItem> GetCommands (PathItem item) => Commands
 		.Where(c => c.Accept(item.path))

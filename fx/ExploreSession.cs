@@ -49,7 +49,6 @@ public class ExploreSession {
 	private Label goPrev, goNext, goLeft, goTo;
 	private TextField addressBar;
 	public ListView pathList;
-	private ListView repoList;
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
 	private string cwdRecall = null;
@@ -66,26 +65,6 @@ public class ExploreSession {
 		main.FilesChanged += e => {
 			RefreshCwd();
 		};
-		int lenName = 42;
-		cwdData = new(new(), (p, i) => {
-			var localName =
-				p.local.Length <= lenName ?
-					p.local :
-					$"{p.local[..(lenName - 2)]}..";
-			if(zipRoot != null) {
-				using var z = ZipFile.OpenRead(zipRoot);
-				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
-				var e = z.GetEntry(local);
-				var size = e.Length;
-				var lastWrite = e.LastWriteTime;
-				return $"{i,3}| {localName.PadRight(lenName)}{size,-8}{lastWrite,-16:MM/dd HH:mm}";
-			} else {
-				var a = File.GetLastAccessTimeUtc(p.path);
-				return $"{i,3}| {localName.PadRight(lenName)}{GetSize(p),-8}{a,-16:MM/dd HH:mm}";
-			}
-		});
-		var favData = new List<PathItem>();
-		var procData = new List<WindowItem>();
 		pathSort = new SortMode(GetLastWrite, false);
 		main.TermEnter += OnTermEnter;
 		root = new View() {
@@ -95,22 +74,6 @@ public class ExploreSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		/*
-		addressBar = new TextField() {
-			Title = "Address",
-			X = Pos.Percent(25) + 1,
-			Y = 0,
-			Width = Dim.Fill() - 1,
-			Height = 1,
-			ReadOnly = true,
-			CanFocus = false,
-
-
-			ColorScheme = Application.Top.ColorScheme with {
-				Focus = new(Color.White, new Color(31, 31, 31))
-			}
-		};
-		*/
 		var tree = new QuickAccessTree();
 		var quickAccess = new TreeView<IFileTree>() {
 			Title = "Quick Access",
@@ -126,18 +89,13 @@ public class ExploreSession {
 		quickAccess.AddObjects(tree.GetRoots(main));
 		foreach(var t in quickAccess.Objects)
 			quickAccess.Expand(t);
-
-
-
-
-
 		var pathPane = new View() {
 			//Title = "Directory",
 			BorderStyle = LineStyle.Single,
 
 			X = Pos.Right(quickAccess),
 			Y = 0,
-			Width = Dim.Fill(24),
+			Width = Dim.Fill(),
 			Height = Dim.Fill(), //30,
 		};
 		cwdChanged += s => pathPane.Title = s;
@@ -173,15 +131,175 @@ public class ExploreSession {
 		goNext = new Label() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
 		goLeft = new Label() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
 		goTo   = new Label() { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
+		var len = new {
+			name = 32,
+		};
+		cwdData = new(new(), (p, i) => {
+			var localName =
+				p.local.Length <= len.name ?
+					p.local :
+					$"{p.local[..(len.name - 2)]}..";
+
+			string GetSize(PathItem p) {
+				if(p.dir) {
+					long GetDirSize(string path) {
+						try {
+							return Directory.GetFileSystemEntries(path).Select(p =>
+								Directory.Exists(p) ?
+									GetDirSize(p) :
+									new FileInfo(p).Length).Sum();
+						} catch(UnauthorizedAccessException e) {
+							return 0;
+						}
+					}
+
+					return fmt(GetDirSize(p.path));
+				} else {
+					/*
+					return l switch {
+						> 1024L * 1024 * 1024 * 1024 => $"{l / (1024L * 1024 * 1024 * 1024), 4} 4",
+						> 1024 * 1024 * 1024 => $"{l / (1024 * 1024 * 1024), 4} 3",
+						> 1024 * 1024 => $"{l / (1024 * 1024), 4} 2",
+						> 1024 => $"{l / 1024, 4} 1",
+						_ => $"{l, 4} 0",
+					};
+					*/
+					return fmt(new FileInfo(p.path).Length);
+				}
+
+				string fmt(long l) {
+					var log = l == 0 ? 0 : (int)(Math.Log2(l) / 10);
+					var b = (int)Math.Pow(2, 10 * log);
+					return $"{log,2} {$"{l / b}".PadLeft(4, '0')}";
+				}
+			}
+			if(zipRoot != null) {
+				using var z = ZipFile.OpenRead(zipRoot);
+				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
+				var e = z.GetEntry(local);
+
+				var name = localName.PadRight(len.name);
+				var size = $"{e.Length/1024}".PadRight(8);
+				var type = (p.dir ? "Dir" : "File").PadRight(12);
+				var lastWrite = e.LastWriteTime.ToString("MM/dd HH:mm").PadRight(12);
+				return $"{i,3}| {name}{size}{type}{lastWrite}";
+			} else {
+				var name = localName.PadRight(len.name);
+				var size = $"{GetSize(p)}".PadRight(8);
+				var type = (
+					p.HasProp(IS_REPOSITORY) ?
+						"dir/repo" :
+					p.dir ?
+						"dir" :
+					p.GetProp(IS_LINK_TO, out string linkto) ?
+						"lnk/shortcut" :
+					Path.GetExtension(p.path) is { Length:>0 }ext ?
+						ext.ToLower() switch {
+							".gdoc"		=> "goog/Docs",
+							".gslides"	=> "goog/Slides",
+							".gsheet"	=> "goog/Sheets",
+							".gdraw"	=> "goog/Draw",
+
+							".m4a"		=> "video/M4A",
+							".mkv"		=> "video/MKV",
+							".mp4"		=> "video/MP4",
+							".mov"		=> "video/MOV",
+							
+							".pdf"		=> "doc/PDF",
+							".epub"		=> "doc/EPUB",
+
+							".docx"		=> "proj/Word",
+							".xlsx"		=> "proj/Excel",
+
+
+							".ipynb"	=> "proj/Jupyter",
+
+							".wav"		=> "audio/WAV",
+							".flac"		=> "audio/FLAC",
+							".mp3"		=> "audio/MP3",
+							".ogg"		=> "audio/OGG",
+
+							".gitignore"=> "git/ignore",
+							".exe"		=> "bin/EXE",
+							".dll"		=> "bin/DLL",
+							
+							".zip"		=> "archive/zip",
+							".7z"		=> "archive/7z",
+							".gz"		=> "archive/GZ",
+
+							".ttf"		=> "TrueTypeFont",
+
+							".msi"		=> "install/MS",
+
+
+							".csproj"	=> "proj/C#",
+							".ove"		=> "proj/Olive",
+							".kra"		=> "proj/Krita",
+							".pdn"		=> "proj/PDN",
+							".drawio"	=> "proj/draw.io",
+							".blend"	=> "proj/Blender",
+							".ase"		=> "proj/ASE",
+							".psd"		=> "proj/PSD",
+							".mscz"		=> "proj/MSCZ",
+							".pptx"		=> "proj/PPT",
+							".sln"		=> "proj/VS",
+
+							".html"		=> "src/HTML",
+							".js"		=> "src/JS",
+							".css"		=> "src/CSS",
+							".sh"		=> "src/Bash",
+							".bat"		=> "src/Batch",
+							".c"		=> "src/C",
+							".h" or
+							".hpp"		=> "src/C++ head",
+							".cc" or
+							".cpp"		=> "src/C++",
+							".cs"		=> "src/C#",
+							".py"		=> "src/Python",
+							".tex"		=> "src/LaTeX",
+
+							
+							".dat"		=> "data/DAT",
+							".xml"		=> "data/XML",
+							".yaml"		=> "data/YAML",
+							".json"		=> "data/JSON",
+							".csv"		=> "data/CSV",
+							".mat"		=> "data/Matlab",
+
+							".ico"		=> "img/Icon",
+							".png"		=> "img/PNG",
+							".jpg"		=> "img/JPEG",
+							".tif"		=> "img/TIF",
+							".svg"		=> "img/SVG",
+
+							".md"		=> "txt/Markdown",
+							".txt"		=> "txt/TXT",
+							".log"		=> "txt/log",
+							{ Length:>12 } => $"{ext[..10]}..",
+							_ => ext
+						} :
+						"file"
+						).PadRight(12);
+				var lastWrite = File.GetLastWriteTime(p.path).ToString("MM/dd HH:mm").PadRight(12);
+				var gitInfo =
+					(p.HasProp(IS_UNSTAGED) ?
+						$"{new GlyphDefinitions().UnChecked}" ://"\u2574" :
+					p.HasProp(IS_STAGED) ?
+						$"{new GlyphDefinitions().Checked}" :
+						"").PadRight(8);
+				return $"{i,3}| {name}{size}{type}{lastWrite}{gitInfo}";
+			}
+		});
+
 		var sortName = new Label() {
 			Text = "Name",
 			AutoSize = false,
 			X = 7,
 			Y = 1,
-			Width = lenName
+			Width = len.name
 		};
 		var sortSize = new Label() {
-			Text = "Size",
+			Text = "LogSize",
 			AutoSize = false,
 			X = Pos.Right(sortName),
 			Y = 1,
@@ -190,14 +308,22 @@ public class ExploreSession {
 		var sortType = new Label() {
 			Text = "Type",
 			AutoSize = false,
-			X = Pos.Right(sortName),
+			X = Pos.Right(sortSize),
 			Y = 1,
-			Width = 8
+			Width = 12
 		};
 		var sortAccessed = new Label() {
 			Text = "Accessed",
 			AutoSize = false,
-			X = Pos.Right(sortSize),
+			X = Pos.Right(sortType),
+			Y = 1,
+			Width = 12
+		};
+
+		var sortGit = new Label() {
+			Text = "Git",
+			AutoSize = false,
+			X = Pos.Right(sortAccessed),
 			Y = 1,
 			Width = 8
 		};
@@ -213,38 +339,14 @@ public class ExploreSession {
 			HasFocus = true,
 			SelectedItem = 1
 		};
-		var properties = new FrameView() {
-			Title = "Properties",
-			X = Pos.Percent(25),
-			Y = 29,
-			Width = Dim.Percent(50),
-			Height = Dim.Fill(1),
-		};
-		var repoPane = new View() {
-			Title = "Repository",
-			BorderStyle = LineStyle.Single,
-			X = Pos.AnchorEnd(24),
-			Y = 0,
-			Width = 24,
-			Height = Dim.Fill(),
-		};
-		repoList = new ListView() {
-			Title = "Repository Items",
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill(),
-			AllowsMarking = true,
-			AllowsMultipleSelection = true,
-		};
 		InitTreeLocal();
 		InitEvents();
 		InitCwd();
 		RefreshPads();
 		void InitTreeLocal () {
 			SView.InitTree(
-				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortAccessed, pathList],
-				[root, addressBar, quickAccess, pathPane, /*properties,*/ repoPane]
+				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortType, sortAccessed, sortGit, pathList],
+				[root, addressBar, quickAccess, pathPane]
 				);
 		}
 		void InitEvents () {
@@ -300,8 +402,6 @@ public class ExploreSession {
 					e.Handled = true;
 				}
 			});
-
-
 			goPrev.MouseEvD(new() {
 				[(int)Button3Clicked] = e => new ContextMenu() {
 					Position = e.MouseEvent.ScreenPosition,
@@ -533,6 +633,7 @@ public class ExploreSession {
 				},
 			});
 			*/
+			/*
 			repoList.OpenSelectedItem += (a, e) => {
 				var item = gitData[e.Item];
 				if(item.staged) Commands.Unstage(git.repo, item.local);
@@ -558,6 +659,7 @@ public class ExploreSession {
 					repoList.SetNeedsDisplay();
 				}
 			});
+			*/
 
 			/*
 			window.AddKeyPress(e => e.KeyEvent.KeyValue switch {
@@ -1277,10 +1379,6 @@ public class ExploreSession {
 		var items = GetItems().ToList();
 		gitMap = items.ToDictionary(item => item.path);
 		gitData = items;
-		repoList.SetSource(gitData);
-		foreach(var (i, it) in gitData.Index()) {
-			repoList.Source.SetMark(i, it.staged);
-		}
 	}
 	void RefreshAddressBar () {
 		var userProfile = Ctx.USER_PROFILE;

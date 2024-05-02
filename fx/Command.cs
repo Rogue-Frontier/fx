@@ -17,7 +17,7 @@ public record Command () {
 
 	public bool cd = false;
 
-	public static string EXECUTABLES_DIR = "Executables";
+	public static string EXECUTABLES_DIR = "executables";
 	public string fmt { set => exe = @$"""{value}"""; }
 	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_DIR}/{value}")}"" {{0}}"; }
 	public bool Accept (string path) => targetAny.Accept(path);
