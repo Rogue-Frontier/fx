@@ -141,32 +141,12 @@ public class ExploreSession {
 					$"{p.local[..(len.name - 2)]}..";
 
 			string GetSize(PathItem p) {
+				//Add option to skip calculating dir size
+
 				if(p.dir) {
-					long GetDirSize(string path) {
-						try {
-							return Directory.GetFileSystemEntries(path).Select(p =>
-								Directory.Exists(p) ?
-									GetDirSize(p) :
-									new FileInfo(p).Length).Sum();
-						} catch(UnauthorizedAccessException e) {
-							return 0;
-						}
-					}
-
-					return fmt(GetDirSize(p.path));
-				} else {
-					/*
-					return l switch {
-						> 1024L * 1024 * 1024 * 1024 => $"{l / (1024L * 1024 * 1024 * 1024), 4} 4",
-						> 1024 * 1024 * 1024 => $"{l / (1024 * 1024 * 1024), 4} 3",
-						> 1024 * 1024 => $"{l / (1024 * 1024), 4} 2",
-						> 1024 => $"{l / 1024, 4} 1",
-						_ => $"{l, 4} 0",
-					};
-					*/
-					return fmt(new FileInfo(p.path).Length);
+					return "";
 				}
-
+				return fmt(p.size);
 				string fmt(long l) {
 					var log = l == 0 ? 0 : (int)(Math.Log2(l) / 10);
 					var b = (int)Math.Pow(2, 10 * log);
@@ -286,6 +266,8 @@ public class ExploreSession {
 						$"{new GlyphDefinitions().UnChecked}" ://"\u2574" :
 					p.HasProp(IS_STAGED) ?
 						$"{new GlyphDefinitions().Checked}" :
+					//p.HasProp(IS_REPOSITORY) ? "*" :
+
 						"").PadRight(8);
 				return $"{i,3}| {name}{size}{type}{lastWrite}{gitInfo}";
 			}
@@ -763,6 +745,10 @@ public class ExploreSession {
 			goto Handled;
 		}
 
+		if(cmd is { Length:0 } or null) {
+			return;
+		}
+
 		bool readProc = false;
 		var pi = new ProcessStartInfo("cmd.exe") {
 			WorkingDirectory = cwd,
@@ -774,6 +760,10 @@ public class ExploreSession {
 		Handled:
 		e.term.Text = "";
 		e.Handled = true;
+
+		Task.Run(() => {
+
+		});
 	}
 	public IEnumerable<int> GetMarkedIndex () =>
 		Enumerable.Range(0, cwdData.Count).Where(pathList.Source.IsMarked);
@@ -1609,6 +1599,23 @@ public record PathItem (string local, string path, HashSet<IProp> propSet) {
 	public string locked => isLocked ? "~" : "";
 	public string staged => HasProp(IS_STAGED) ? "+" : HasProp(IS_UNSTAGED) ? "*" : "";
 	public string str => $"{tag,-24}{locked,-2}{staged,-2}";
+
+	private long _size = -1;
+	public long size => _size != -1 ? _size : _size = GetSize();
+
+	private long GetSize () {
+		long GetDirSize (string path) {
+			try {
+				return Directory.GetFileSystemEntries(path).Select(p =>
+					Directory.Exists(p) ?
+						GetDirSize(p) :
+						new FileInfo(p).Length).Sum();
+			} catch(UnauthorizedAccessException e) {
+				return 0;
+			}
+		}
+		return dir ? GetDirSize(path) : new FileInfo(path).Length;
+	}
 	public override string ToString () => str;
 }
 public record GitItem (string local, string path, bool staged) {
