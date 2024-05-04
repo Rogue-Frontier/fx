@@ -45,7 +45,6 @@ public class ExploreSession {
 	private ListMarker<PathItem> cwdData;
 	public SortMode pathSort;
 	Dictionary<string, GitItem> gitMap = new();
-	private List<GitItem> gitData = new();
 	private Label goPrev, goNext, goLeft, goTo;
 	private TextField addressBar;
 	public ListView pathList;
@@ -107,7 +106,8 @@ public class ExploreSession {
 			Height = 1,
 			ColorScheme = Application.Top.ColorScheme with {
 				Focus = new(Color.White, new Color(31, 31, 31))
-			}
+			},
+			TabStop = false
 		};
 
 		CancellationTokenSource filterCancel = null;
@@ -142,154 +142,16 @@ public class ExploreSession {
 		goNext = new Label() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
 		goLeft = new Label() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
 		goTo   = new Label() { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
-		var len = new {
-			name = 32,
-		};
-		cwdData = new(new(), (p, i) => {
-			var localName =
-				p.local.Length <= len.name ?
-					p.local :
-					$"{p.local[..(len.name - 2)]}..";
 
-			string GetSize(PathItem p) {
-				//Add option to skip calculating dir size
-
-				if(p.dir) {
-					return "";
-				}
-				return fmt(p.size);
-				string fmt(long l) {
-					var log = l == 0 ? 0 : (int)(Math.Log2(l) / 10);
-					var b = (int)Math.Pow(2, 10 * log);
-					return $"{log,2} {$"{l / b}".PadLeft(4, '0')}";
-				}
-			}
-			if(zipRoot != null) {
-				using var z = ZipFile.OpenRead(zipRoot);
-				var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
-				var e = z.GetEntry(local);
-
-				var name = localName.PadRight(len.name);
-				var size = $"{e.Length/1024}".PadRight(8);
-				var type = (p.dir ? "Dir" : "File").PadRight(12);
-				var lastWrite = e.LastWriteTime.ToString("MM/dd HH:mm").PadRight(12);
-				return $"{i,3}| {name}{size}{type}{lastWrite}";
-			} else {
-				var name = localName.PadRight(len.name);
-				var size = $"{GetSize(p)}".PadRight(8);
-				var type = (
-					p.HasProp(IS_REPOSITORY) ?
-						"dir/repo" :
-					p.dir ?
-						"dir" :
-					p.GetProp(IS_LINK_TO, out string linkto) ?
-						"lnk/shortcut" :
-					Path.GetExtension(p.path) is { Length:>0 }ext ?
-						ext.ToLower() switch {
-							".gdoc"		=> "goog/Docs",
-							".gslides"	=> "goog/Slides",
-							".gsheet"	=> "goog/Sheets",
-							".gdraw"	=> "goog/Draw",
-
-							".m4a"		=> "video/M4A",
-							".mkv"		=> "video/MKV",
-							".mp4"		=> "video/MP4",
-							".mov"		=> "video/MOV",
-							
-							".pdf"		=> "doc/PDF",
-							".epub"		=> "doc/EPUB",
-
-							".docx"		=> "proj/Word",
-							".xlsx"		=> "proj/Excel",
-
-
-							".ipynb"	=> "proj/Jupyter",
-
-							".wav"		=> "audio/WAV",
-							".flac"		=> "audio/FLAC",
-							".mp3"		=> "audio/MP3",
-							".ogg"		=> "audio/OGG",
-
-							".gitignore"=> "git/ignore",
-							".exe"		=> "bin/EXE",
-							".dll"		=> "bin/DLL",
-							
-							".zip"		=> "archive/zip",
-							".7z"		=> "archive/7z",
-							".gz"		=> "archive/GZ",
-
-							".ttf"		=> "TrueTypeFont",
-
-							".msi"		=> "install/MS",
-
-
-							".csproj"	=> "proj/C#",
-							".ove"		=> "proj/Olive",
-							".kra"		=> "proj/Krita",
-							".pdn"		=> "proj/PDN",
-							".drawio"	=> "proj/draw.io",
-							".blend"	=> "proj/Blender",
-							".ase"		=> "proj/ASE",
-							".psd"		=> "proj/PSD",
-							".mscz"		=> "proj/MSCZ",
-							".pptx"		=> "proj/PPT",
-							".sln"		=> "proj/VS",
-
-							".html"		=> "src/HTML",
-							".js"		=> "src/JS",
-							".css"		=> "src/CSS",
-							".sh"		=> "src/Bash",
-							".bat"		=> "src/Batch",
-							".c"		=> "src/C",
-							".h" or
-							".hpp"		=> "src/C++ head",
-							".cc" or
-							".cpp"		=> "src/C++",
-							".cs"		=> "src/C#",
-							".py"		=> "src/Python",
-							".tex"		=> "src/LaTeX",
-
-							
-							".dat"		=> "data/DAT",
-							".xml"		=> "data/XML",
-							".yaml"		=> "data/YAML",
-							".json"		=> "data/JSON",
-							".csv"		=> "data/CSV",
-							".mat"		=> "data/Matlab",
-
-							".ico"		=> "img/Icon",
-							".png"		=> "img/PNG",
-							".jpg"		=> "img/JPEG",
-							".tif"		=> "img/TIF",
-							".svg"		=> "img/SVG",
-
-							".md"		=> "txt/Markdown",
-							".txt"		=> "txt/TXT",
-							".log"		=> "txt/log",
-							{ Length:>12 } => $"{ext[..10]}..",
-							_ => ext
-						} :
-						"file"
-						).PadRight(12);
-				var lastWrite = File.GetLastWriteTime(p.path).ToString("MM/dd HH:mm").PadRight(12);
-				var gitInfo =
-					(p.HasProp(IS_UNSTAGED) ?
-						$"{new GlyphDefinitions().UnChecked}" ://"\u2574" :
-					p.HasProp(IS_STAGED) ?
-						$"{new GlyphDefinitions().Checked}" :
-					//p.HasProp(IS_REPOSITORY) ? "*" :
-
-						"").PadRight(8);
-				return $"{i,3}| {name}{size}{type}{lastWrite}{gitInfo}";
-			}
-		});
+		ConcurrentDictionary<PathItem, string> entryCache = new();
+		cwdData = new(new(), (p, i) => p.entry);
 
 		var sortName = new Label() {
 			Text = "Name",
 			AutoSize = false,
 			X = 7,
 			Y = 1,
-			Width = len.name
+			Width = 32
 		};
 		var sortSize = new Label() {
 			Text = "LogSize",
@@ -349,9 +211,16 @@ public class ExploreSession {
 				}
 			};
 			quickAccess.KeyDownD(value: new() {
+				[(int)Enter | (int)ShiftMask] = _ => {
+
+					if(quickAccess.SelectedObject is IFilePath { path: { }p } && Directory.Exists(p)) {
+						main.folder.AddTab("Expl", new ExploreSession(main, p).root, true, root);
+					}
+					return;
+				},
 				['"'] = _ => {
 					if(quickAccess.SelectedObject is IFilePath item && File.Exists(item.path)) {
-						ExploreSession.Preview($"Preview: {item.path}", File.ReadAllText(item.path));
+						ExploreSession.ShowPreview($"Preview: {item.path}", File.ReadAllText(item.path));
 					}
 				},
 				['?'] = _ => {
@@ -374,6 +243,9 @@ public class ExploreSession {
 				}
 			});
 			quickAccess.MouseEvD(new() {
+				[(int)Button1Pressed] = e => {
+					//Ctrl+Click open new tab
+				},
 				[(int)Button3Pressed] = e => {
 					var prevObj = quickAccess.SelectedObject;
 					var y = e.MouseEvent.Y;
@@ -505,13 +377,12 @@ public class ExploreSession {
 					'<' => () => { main.folder.SwitchTab(-1); },
 					'>' => () => { main.folder.SwitchTab(1); },
 					',' => () => {
-						//Create new tab
 						if(cwdRecall != null) SetCwd(cwdRecall);
 					},
 					'.' => () => {
-						var cc = ShowPathContext(GetPathItem(cwd), 0);
-						cc.MenuBar.KeyDownD(value: new() {
-							{ '.', _ => cc.Hide() }
+						var context = ShowPathContext(GetPathItem(cwd), 0);
+						context.MenuBar.KeyDownD(value: new() {
+							{ '.', _ => context.Hide() }
 						});
 					},
 					':' => () => main.FocusTerm(pathList),
@@ -520,8 +391,8 @@ public class ExploreSession {
 						return;
 					},
 					'"' => () => {
-						if(!GetItem(out var p) || p.dir) return;
-						Preview($"Preview: {p.path}", File.ReadAllText(p.path));
+						if(!GetItem(out var p)) return;
+						p.ShowPreview();
 					},
 					'?' => () => {
 						if(!GetItem(out var p)) return;
@@ -788,7 +659,7 @@ public class ExploreSession {
 		var d = new Dialog() {
 			Title= $"Properties: {item.path}",
 
-			Width = Dim.Sized(108),
+			Width = Dim.Sized(Math.Min(108, Application.Top.Frame.Width - 8)),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
@@ -875,9 +746,9 @@ public class ExploreSession {
 		if(gitMap.Any()) {
 			if(gitMap.TryGetValue(path, out var p)) {
 				if(p.staged) {
-					yield return IS_STAGED;
+					yield return IS_GIT_STAGED;
 				} else {
-					yield return IS_UNSTAGED;
+					yield return IS_GIT_UNSTAGED;
 				}
 			}
 		}
@@ -918,6 +789,7 @@ public class ExploreSession {
 				});
 			});
 		}
+
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuBarItem("Explore", null, () => {
 				main.folder.AddTab("Expl", new ExploreSession(main, item.path).root, true);
@@ -936,28 +808,42 @@ public class ExploreSession {
 				]
 			};
 		} else if(item.HasProp(IS_FILE)) {
-			yield return new MenuItem("Edit", null, () => {
+
+			yield return new MenuBarItem("Edit", null, () => {
 				main.folder.AddTab($"Edit", new EditSession(main, item.path).root, true, main.root.FirstOrDefault()?.Focused);
-			});
+			}) {
+				Children = [
+					new MenuItem("Copy text", null, () => {
+						Clipboard.TrySetClipboardData(File.ReadAllText(item.path));
+					})
+				]
+			};
 		}
+		yield return new MenuBarItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path)) {
+			Children = [
+				new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""))
+			]
+		};
 		if(Path.GetDirectoryName(item.path) is { } par) {
-			yield return new MenuBarItem("Explore parent", null, () => {
-				main.folder.AddTab("Expl", new ExploreSession(main, par).root, true);
-			}) {
-				Children = [
-					new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{par}"""))
-				]
-			};
-			yield return new MenuBarItem("Term parent", null, () => {
-				var session = new TermSession(main, item.path);
-				main.folder.AddTab($"Term", session.root, true, main.root.FirstOrDefault()?.Focused);
-			}) {
-				Children = [
-					UseSystemTerminal(item.path),
-					RunCommand
-				]
-			};
-			
+			yield return new MenuBarItem("Parent", [
+				new MenuBarItem("Explore", null, () => {
+					main.folder.AddTab("Expl", new ExploreSession(main, par).root, true);
+				}){
+					Children = [
+						new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{par}"""))
+					]
+				},
+
+				new MenuBarItem("Term", null, () => {
+					var session = new TermSession(main, item.path);
+					main.folder.AddTab($"Term", session.root, true, main.root.FirstOrDefault()?.Focused);
+					}) {
+						Children = [
+							UseSystemTerminal(item.path),
+							RunCommand
+						]
+				}
+			]);
 		}
 		yield return new MenuBarItem("Find", null, () => {
 			var find = new FindSession(main, item.path);
@@ -997,6 +883,42 @@ public class ExploreSession {
 				});
 			})
 		]);
+
+		if(item.HasProp(IS_REPOSITORY)) {
+			using var repo = new Repository(item.path);
+			var github = repo.Network.Remotes.Select((Remote r) => {
+				var url = r.Url;
+				if(Regex.Match(url, "git@github.com:(?<user>[a-zA-Z]+)/(?<repo>[a-zA-Z]+).git") is { Success:true} m) {
+					return new MenuItem("View on GitHub", null, () => {
+						Process.Start("explorer", $"https://github.com/{m.Groups["user"].Value}/{m.Groups["repo"].Value}");
+					});
+				}
+				return null;
+			}).FirstOrDefault(r => r != null);
+			yield return new MenuBarItem("Repository", [..Enumerable.Except([
+				new MenuItem("status", null, () => {
+
+					using var repo = new Repository(item.path);
+					repo.RetrieveStatus();
+				}),
+				/*
+				new MenuBarItem("Remotes", null, () => { }){
+					Children = [
+						//..repo.Network.Remotes.SelectMany(GetRemoteActions)
+					]
+				},
+				*/
+				github,
+			], [null])]);
+		}
+		/*
+		if(item.GetProp(IN_REPOSITORY, out RepoItem ri)) {
+			yield return new MenuItem("cd repo root", null, () => {
+				
+			});
+		}
+		*/
+
 		var pins = main.ctx.fx.pins;
 		var isPin = pins.Contains(item.path);
 		yield return new MenuItem(isPin ? "Unpin" : "Pin", null, () =>
@@ -1009,32 +931,45 @@ public class ExploreSession {
 		);
 		var hidden = main.ctx.fx.hidden;
 		var isHidden = hidden.Contains(item.path);
-		yield return new MenuItem(isHidden ? "Unhide" : "Hide", null, () => {
+		yield return new MenuItem(isHidden ? "Show" : "Ignore", null, () => {
 			((Func<string, bool>)(isHidden ? hidden.Remove : hidden.Add))(item.path);
 			main.FilesChanged([item.path]);
 		});
 		if(item.HasProp(IS_DIRECTORY)) {
 			//yield return new MenuItem("Open in System", "", () => RunCmd($"explorer.exe {item.path}"));
 			yield return new MenuItem("Delete Dir", null, () => {
-				if(RequestConfirm($"Delete {item.path}")) {
-					Directory.Delete(item.path, true);
-					
-					main.FilesChanged([item.path]);
+				if(RequestConfirm($"Delete {item.path} [{item.local}]", item.local)) {
+					Do();
+					void Do() {
+						try {
+
+							Directory.Delete(item.path, true);
+							main.FilesChanged([item.path]);
+						} catch(UnauthorizedAccessException e) {
+							if(RequestConfirm($"Failed to delete {item.path}. Retry?")) {
+								Do();
+							}
+						}
+					}
 				}
 			});
 		} else {
 			yield return new MenuItem("Delete File", null, () => {
-				if(RequestConfirm($"Delete {item.path}")) {
-					File.Delete(item.path);
-					main.FilesChanged([item.path]);
+				if(RequestConfirm($"Delete {item.path} [{item.local}]", item.local)) {
+					Do();
+					void Do () {
+						try {
+							File.Delete(item.path);
+							main.FilesChanged([item.path]);
+						} catch(UnauthorizedAccessException e) {
+							if(RequestConfirm($"Access denied. Retry?")) {
+								Do();
+							}
+						}
+					}
 				}
 			});
 		}
-		yield return new MenuBarItem("Copy Path", "", () => Clipboard.TrySetClipboardData(item.path)) {
-			Children = [
-				new MenuItem("Show in System", "", () => RunCmd(@$"explorer.exe /select, ""{item.path}"""))
-			]
-		};
 		yield return new MenuItem("Properties", null, () => ShowProperties(item));
 	}
 	/// <summary>
@@ -1074,37 +1009,36 @@ public class ExploreSession {
 		}
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuItem("Remember", null, () => cwdRecall = item.path);
-			yield return new MenuItem("New File", null, () => RequestName("New File", name => {
-				if(Path.Combine(item.path, name) is { } f && !Path.Exists(f)) {
-					File.Create(f);
-					if(item.path.StartsWith(cwd)) {
-						RefreshCwd();
-						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
-					}
-					return true;
-				}
-				return false;
-			}), canExecute: () => !item.HasProp(IS_LOCKED));
-			yield return new MenuItem("New Dir", null, () => RequestName("New Directory", name => {
-				if(Path.Combine(item.path, name) is { }f && !Path.Exists(f)) {
-					Directory.CreateDirectory(f);
-					if(item.path.StartsWith(cwd)) {
-						RefreshCwd();
-						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
-					}
-					return true;
-				}
-				return false;
-			}), canExecute: () => !item.HasProp(IS_LOCKED));
-			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
-				string local = GetRepoLocal(root, item.path);
-				yield return new MenuItem("Diff", null, () => {
-					using var repo = new Repository(root);
-					Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
-				});
-			}
+
+			yield return new MenuBarItem("New", null, () => { }) {
+				Children = [
+					new MenuItem("File", null, () => RequestName("New File", name => {
+						if(Path.Combine(item.path, name) is { } f && !Path.Exists(f)) {
+							File.Create(f);
+							if(item.path.StartsWith(cwd)) {
+								RefreshCwd();
+								pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
+							}
+							return true;
+						}
+						return false;
+					}), canExecute: () => !item.HasProp(IS_LOCKED)),
+					new MenuItem("Dir", null, () => RequestName("New Directory", name => {
+						if(Path.Combine(item.path, name) is { }f && !Path.Exists(f)) {
+							Directory.CreateDirectory(f);
+							if(item.path.StartsWith(cwd)) {
+								RefreshCwd();
+								pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
+							}
+							return true;
+						}
+						return false;
+					}), canExecute: () => !item.HasProp(IS_LOCKED))
+				]
+			};
+
 			//Midnight Commander multi-move
-			yield return new MenuItem("Copy", null, () => RequestName($"Copy {item.path}", name => {
+			yield return new MenuBarItem("Copy To", null, () => RequestName($"Copy {item.path}", name => {
 				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
 					File.Copy(item.path, f);
 					if(item.path.StartsWith(cwd)) {
@@ -1114,44 +1048,48 @@ public class ExploreSession {
 					return true;
 				}
 				return false;
-			}, item.path));
-			yield return new MenuItem("Move", null, () => RequestName($"Move {item.path}", name => {
-				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
-					File.Move(item.path, f);
-					if(item.path.StartsWith(cwd)) {
-						RefreshCwd();
-						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
-					}
-					return true;
-				}
-				return false;
-			}, item.path));
+			}, item.path)) {
+				Children = [
+					new MenuItem("Move To", null, () => RequestName($"Move {item.path}", name => {
+						if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
+							File.Move(item.path, f);
+							if(item.path.StartsWith(cwd)) {
+								RefreshCwd();
+								pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
+							}
+							return true;
+						}
+						return false;
+					}, item.path))
+				]
+			};
 		} else if(item.HasProp(IS_FILE)) {
 			if(Path.GetDirectoryName(item.path) is { } par && HasRepo(GetPathItem(par), out string root)) {
 				string local = GetRepoLocal(root, item.path);
-				var unstaged = item.HasProp(IS_UNSTAGED);
-				var staged = item.HasProp(IS_STAGED);
+				var unstaged = item.HasProp(IS_GIT_UNSTAGED);
+				var staged = item.HasProp(IS_GIT_STAGED);
 				if(unstaged || staged) {
 					yield return new MenuItem("Diff", "", () => {
 						using var repo = new Repository(root);
-						Preview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
+						ShowPreview($"Diff: {item.path}", repo.Diff.Compare<Patch>([local]).Content);
 					});
-					if(unstaged) {
-						yield return new MenuItem("Stage", "", () => {
-							using var repo = new Repository(root);
-							Commands.Stage(repo, local);
-							RefreshCwd();
-						});
-					} else if(staged) {
-						yield return new MenuItem("Unstage", "", () => {
-							using var repo = new Repository(root) ;
-							Commands.Unstage(repo, local);
-							RefreshCwd();
-						});
-					}
+					
+				}
+				if(unstaged) {
+					yield return new MenuItem("Stage", "", () => {
+						using var repo = new Repository(root);
+						Commands.Stage(repo, local);
+						RefreshCwd();
+					});
+				} else if(staged) {
+					yield return new MenuItem("Unstage", "", () => {
+						using var repo = new Repository(root);
+						Commands.Unstage(repo, local);
+						RefreshCwd();
+					});
 				}
 			}
-			yield return new MenuItem("Copy", null, () => RequestName($"Copy {item.path}", name => {
+			yield return new MenuBarItem("Copy To", null, () => RequestName($"Copy {item.path}", name => {
 				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
 					File.Copy(item.path, f);
 					if(item.path.StartsWith(cwd)) {
@@ -1161,18 +1099,21 @@ public class ExploreSession {
 					return true;
 				}
 				return false;
-			}, item.path));
-			yield return new MenuItem("Move", null, () => RequestName($"Move {item.path}", name => {
-				if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
-					File.Move(item.path, f);
-					if(item.path.StartsWith(cwd)) {
-						RefreshCwd();
-						pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
-					}
-					return true;
-				}
-				return false;
-			}, item.path));
+			}, item.path)) {
+				Children = [
+					new MenuItem("Move To", null, () => RequestName($"Move {item.path}", name => {
+						if((Path.IsPathRooted(name) ? Path.GetFullPath(name) : Path.Combine(item.path, name)) is { } f && !Path.Exists(f)) {
+							File.Move(item.path, f);
+							if(item.path.StartsWith(cwd)) {
+								RefreshCwd();
+								pathList.SelectedItem = cwdData.list.FindIndex(p => p.path == f);
+							}
+							return true;
+						}
+						return false;
+					}, item.path))
+				]
+			};
 
 		}
 	}
@@ -1210,26 +1151,57 @@ public class ExploreSession {
 		});
 	}
 
-	public static bool RequestConfirm (string title) {
+	public static bool RequestConfirm (string title, string password = "") {
 		var confirm = new Button() {
 			Title = "Confirm",
+
+			X = 1,
+			Y = 1,
 		};
 		var cancel = new Button() {
 			Title = "Cancel",
+			X = Pos.Right(confirm),
+			Y = 1,
 		};
 		var d = new Dialog() {
 			Title = title,
-			Buttons = [confirm, cancel],
-			Width = 32,
-			Height = 3,
+
+			Width = 80,
+			Height = 4,
 		};
+
+		var tv = new TextField() {
+			X = 1,
+			Y = 0,
+			Width = Dim.Fill(1),
+			Height = 1,
+			HasFocus = true
+		};
+
+		tv.KeyDownD(new() {
+			[(int)Enter] = e => {
+				Confirm();
+			}
+		});
+		d.Add([tv, confirm, cancel]);
 		bool result = false;
 		void Confirm () {
+			if(tv.Text != password) {
+				return;
+			}
+
 			result = true;
 			d.RequestStop();
 		}
+		d.KeyDownD(new() {
+			[(int)Enter] = e => {
+				Confirm();
+			}
+		});
 		confirm.MouseClick += (a, e) => Confirm();
 		cancel.MouseClick += (a, e) => d.RequestStop();
+
+		tv.SetFocus();
 		Application.Run(d);
 		return result;
 	}
@@ -1244,7 +1216,7 @@ public class ExploreSession {
 		var d = new Dialog() {
 			Title = title,
 			Buttons = [confirm, cancel],
-			Width = 48, Height = 6,
+			Width = 80, Height = 6,
 		};
 		var input = new TextField() {
 			X = 1,
@@ -1274,20 +1246,19 @@ public class ExploreSession {
 	/// </summary>
 	/// <param name="path"></param>
 	private void RefreshRepo (string path) {
-		//TODO: Setup File System Watcher
+		//TO DO: clean up spaghetti
 		var item = GetPathItem(path);
 		if(git is { root: { } root }) {
 			var stillInRepo = path.StartsWith(root);
 			if(stillInRepo) {
 				//If we're in the repo but not at root, remember that this directory is within the repository
 				if(path != root && !item.HasProp(IN_REPOSITORY)) {
-					var next = IN_REPOSITORY.Make<RepoItem>(git.repo.CalcRepoItem(path));
+					var next = IN_REPOSITORY.Make(git.repo.CalcRepoItem(path));
 					//TO DO: fix adding attributes
 					ctx.pathData[path] = new(item.local, item.path, new([.. item.propSet, next]));
 				}
 				RefreshChanges();
 			} else {
-				gitData.Clear();
 				git?.Clear();
 				git = default;
 			}
@@ -1307,6 +1278,146 @@ public class ExploreSession {
 			}
 		}
 	}
+
+	string GenerateEntry(int i, PathItem p) {
+		var len = new {
+			name = 32
+		};
+		var localName =
+			p.local.Length <= len.name ?
+				p.local :
+				$"{p.local[..(len.name - 2)]}..";
+		string GetSize(PathItem p) {
+			//Add option to skip calculating dir size
+
+			if(p.dir) {
+				return "";
+			}
+			return fmt(p.size);
+			string fmt(long l) {
+				var log = l == 0 ? 0 : (int)(Math.Log2(l) / 10);
+				var b = (int)Math.Pow(2, 10 * log);
+				return $"{log,2} {$"{l / b}".PadLeft(4, '0')}";
+			}
+		}
+		if(zipRoot != null) {
+			using var z = ZipFile.OpenRead(zipRoot);
+			var local = $"{p.path[(zipRoot.Length + 1)..]}{(p.dir ? "/" : "")}".Replace("\\", "/");
+			var e = z.GetEntry(local);
+
+			var name = localName.PadRight(len.name);
+			var size = $"{e.Length/1024}".PadRight(8);
+			var type = (p.dir ? "Dir" : "File").PadRight(12);
+			var lastWrite = e.LastWriteTime.ToString("MM/dd HH:mm").PadRight(12);
+			return $"{i,3}| {name}{size}{type}{lastWrite}";
+		} else {
+			var name = localName.PadRight(len.name);
+			var size = $"{GetSize(p)}".PadRight(8);
+			var type = (
+				p.HasProp(IS_REPOSITORY) ?
+					"dir/repo" :
+				p.dir ?
+					"dir" :
+				p.GetProp(IS_LINK_TO, out string linkto) ?
+					"lnk/shortcut" :
+				Path.GetExtension(p.path) is { Length:>0 }ext ?
+					ext.ToLower() switch {
+						".zip"		=> "arc/zip",
+						".7z"		=> "arc/7z",
+						".gz"		=> "arc/GZ",
+							
+						".flac"		=> "aud/FLAC",
+						".mp3"		=> "aud/MP3",
+						".ogg"		=> "aud/OGG",
+						".wav"		=> "aud/WAV",
+
+						".dll"		=> "bin/DLL",
+						".exe"		=> "bin/EXE",
+						".msi"		=> "bin/MSI",
+
+						".bin"		=> "dat/binary",
+						".dat"		=> "dat/DAT",
+						".xml"		=> "dat/XML",
+						".yaml"		=> "dat/YAML",
+						".json"		=> "dat/JSON",
+						".csv"		=> "dat/CSV",
+						".mat"		=> "dat/Matlab",
+
+						".pdf"		=> "doc/PDF",
+						".epub"		=> "doc/EPUB",
+						".docx"		=> "doc/Word",
+						".xlsx"		=> "doc/Excel",
+						".ove"		=> "doc/Olive",
+						".kra"		=> "doc/Krita",
+						".pdn"		=> "doc/PDN",
+						".drawio"	=> "doc/draw.io",
+						".blend"	=> "doc/Blender",
+						".ase"		=> "doc/ASE",
+						".psd"		=> "doc/PSD",
+						".mscz"		=> "doc/MSCZ",
+						".pptx"		=> "doc/PPT",
+						".ipynb"	=> "doc/Jupyter",
+
+						".gitignore"=> "git/ignore",
+						
+						".ttf"		=> "TrueTypeFont",
+
+						".gdoc"		=> "goog/Docs",
+						".gslides"	=> "goog/Slides",
+						".gsheet"	=> "goog/Sheets",
+						".gdraw"	=> "goog/Draw",
+
+						".ico"		=> "img/Icon",
+						".png"		=> "img/PNG",
+						".jpg"		=> "img/JPEG",
+						".tif"		=> "img/TIF",
+						".svg"		=> "img/SVG",
+
+						".csproj"	=> "proj/C#",
+
+
+						".sln"		=> "sln/VS",
+
+						".html"		=> "src/HTML",
+						".js"		=> "src/JS",
+						".css"		=> "src/CSS",
+						".sh"		=> "src/Bash",
+						".bat"		=> "src/Batch",
+						".c"		=> "src/C",
+						".h" or".hpp"
+									=> "src/C++ head",
+						".cc" or ".cpp"
+									=> "src/C++ body",
+						".cs"		=> "src/C#",
+						".py"		=> "src/Python",
+						".tex"		=> "src/TeX",
+
+						".md"		=> "txt/Markdown",
+						".txt"		=> "txt/ASCII",
+						".log"		=> "txt/log",
+
+						".m4a"		=> "vid/M4A",
+						".mkv"		=> "vid/MKV",
+						".mp4"		=> "vid/MP4",
+						".mov"		=> "vid/MOV",
+						{ Length:>12 } => $"{ext[..10]}..",
+						_ => ext
+					} :
+					"file"
+					).PadRight(12);
+			var lastWrite = File.GetLastWriteTime(p.path).ToString("MM/dd HH:mm").PadRight(12);
+			var gitInfo =
+				(p.HasProp(IS_GIT_UNSTAGED) ?
+					$"{new GlyphDefinitions().UnChecked}" ://"\u2574" :
+				p.HasProp(IS_GIT_STAGED) ?
+					$"{new GlyphDefinitions().Checked}" :
+				//p.HasProp(IS_REPOSITORY) ? "*" :
+
+					"").PadRight(8);
+			return $"{i,3}| {name}{size}{type}{lastWrite}{gitInfo}";
+		}
+	}
+
 	void RefreshDirListing (string s) {
 		try {
 			if(s == Path.GetFullPath("%APPDATA%/fx/libraries/")) {
@@ -1359,11 +1470,10 @@ public class ExploreSession {
 						s => nf.IsMatch(s.local) :
 						null;
 
-				PathItem[] items = [
+				IEnumerable<PathItem> items = [
 					up, upper,
 					..Directory.GetDirectories(s)
 						.Except(main.ctx.fx.hidden)
-						
 						.Select(GetPathItem)
 						.Select(transform)
 						.Except([null])
@@ -1375,19 +1485,25 @@ public class ExploreSession {
 						.MaybeWhere(f)
 						.OrderPath(pathSort)
 				];
-				cwdData.list.AddRange(items.Except([null]));
+				var _items = items.Except([null]).ToArray();
+				foreach(var (index, item) in _items.Index()) {
+					item.entry = GenerateEntry(index, item);
+				}
+				cwdData.list.AddRange(_items);
 			}
 		}catch(UnauthorizedAccessException e) {
 		}
 	}
 	public void RefreshChanges () {
 		IEnumerable<GitItem> GetItems () {
-			foreach(var item in git.repo.RetrieveStatus()) {
+			var status = git.repo.RetrieveStatus();
+			var diff = git.repo.Diff;
+			foreach(var item in status) {
 				GitItem GetItem (bool staged) => new GitItem(item.FilePath, Path.GetFullPath($"{git.root}/{item.FilePath}"), staged);
 				if(item.State switch {
 					FileStatus.ModifiedInIndex => GetItem(true),
 					FileStatus.ModifiedInWorkdir => GetItem(false),
-					_ => null
+					_ => null,
 				} is { } it) {
 					yield return it;
 				}
@@ -1395,7 +1511,6 @@ public class ExploreSession {
 		}
 		var items = GetItems().ToList();
 		gitMap = items.ToDictionary(item => item.path);
-		gitData = items;
 	}
 	void RefreshAddressBar () {
 		var userProfile = Ctx.USER_PROFILE;
@@ -1405,10 +1520,7 @@ public class ExploreSession {
 			userProfile = userProfile.Replace(root, Fx.WORK_ROOT);
 		}
 		showCwd = showCwd.Replace(userProfile, USER_PROFILE_MASK);
-		//Anonymize
 		cwdChanged?.Invoke(showCwd);
-
-
 		Console.Title = showCwd;
 		pathList.SelectedItem = Math.Min(Math.Max(0, pathList.Source.Count - 1), lastIndex.GetValueOrDefault(cwd, 0));
 		pathList.SetNeedsDisplay();
@@ -1467,8 +1579,6 @@ public class ExploreSession {
 		cwd = path;
 		RefreshAddressBar();
 	}
-
-
 	void Go (PathItem i) {
 		if(i.HasProp(IS_LOCKED)) {
 			return;
@@ -1500,7 +1610,7 @@ public class ExploreSession {
 		}
 		main.ctx.fx.timesOpened.AddOrUpdate(i.path, 1, (p, n) => n + 1);
 		main.ctx.fx.lastOpened[i.path] = DateTime.Now;
-		RunCmd($"cd {cwd} & {i.path}");
+		RunCmd(@$"cd {cwd} & ""{i.path}""");
 	}
 	void GoPath(string dest) {
 		cwdNext.Clear();
@@ -1562,11 +1672,11 @@ public class ExploreSession {
 		p = cwdData.list[index = ind];
 		return true;
 	}
-	public static void Preview (string title, string content) {
+	public static void ShowPreview (string title, string content) {
 		var d = new Dialog() {
 			Title = title,
 
-			Width = Dim.Sized(108),
+			Width = Dim.Sized(Math.Min(108, Application.Top.Frame.Width - 8)),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
@@ -1586,7 +1696,7 @@ public class ExploreSession {
 		Application.Run(d);
 	}
 	private void SetRepo(string root) {
-		git = new(root, new Repository(root));
+		git = new(root);
 	}
 }
 public record ProcItem (Process p) {
@@ -1624,7 +1734,7 @@ public record PathItem (string local, string path, HashSet<IProp> propSet) {
 	//public string locked => restricted ? "🔒" : " ";
 	public string tag => $"{local}{(dir ? "/" : " ")}";
 	public string locked => isLocked ? "~" : "";
-	public string staged => HasProp(IS_STAGED) ? "+" : HasProp(IS_UNSTAGED) ? "*" : "";
+	public string staged => HasProp(IS_GIT_STAGED) ? "+" : HasProp(IS_GIT_UNSTAGED) ? "*" : "";
 	public string str => $"{tag,-24}{locked,-2}{staged,-2}";
 
 	private long _size = -1;
@@ -1644,11 +1754,28 @@ public record PathItem (string local, string path, HashSet<IProp> propSet) {
 		return dir ? GetDirSize(path) : new FileInfo(path).Length;
 	}
 	public override string ToString () => str;
+
+
+	public void ShowPreview () {
+		ExploreSession.ShowPreview($"Preview: {path}",
+			dir ?
+				string.Join("\n",
+					Directory.GetFileSystemEntries(path)
+						.Select(e => e[(path.Length + 1)..])
+					) :
+				File.ReadAllText(path));
+	}
+
+
+
+
+	public string entry = "";
 }
 public record GitItem (string local, string path, bool staged) {
 	public override string ToString () => $"{Path.GetFileName(local)}";
 }
-public record RepoPtr (string root, Repository repo) {
+public record RepoPtr (string root) {
+	public Repository repo = new Repository(root);
 	public void Clear () {
 		repo.Dispose();
 	}

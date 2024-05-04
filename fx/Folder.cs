@@ -173,6 +173,8 @@ public record Tab {
 	public string name;
 	public View view;
 
+	public object Session;
+
 	public View tab;
 	public View leftBar, rightBar;
 	public Tab (string name, View view) {

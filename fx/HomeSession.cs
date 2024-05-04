@@ -45,9 +45,19 @@ public class HomeSession {
 			}
 		};
 		quickAccess.KeyDownD(value: new() {
+			[(int)Enter | (int)ShiftMask] = _ => {
+				if(quickAccess.SelectedObject is IFilePath { path: { } p } && Directory.Exists(p)) {
+					main.folder.AddTab("Expl", new ExploreSession(main, p).root, false, root);
+				}
+				return;
+			},
 			['"'] = _ => {
-				if(quickAccess.SelectedObject is IFilePath item && File.Exists(item.path)) {
-					ExploreSession.Preview($"Preview: {item.path}", File.ReadAllText(item.path));
+				if(quickAccess.SelectedObject is IFilePath {path:{ }p } && Path.Exists(p)) {
+					ExploreSession.ShowPreview($"Preview: {p}",
+						Directory.Exists(p)?
+							string.Join('\n', Directory.GetFileSystemEntries(p).Select(d => d[(p.Length+1)..])) :
+							File.ReadAllText(p)
+						);
 				}
 			},
 			['?'] = _ => {
@@ -69,7 +79,48 @@ public class HomeSession {
 				main.folder.SwitchTab(1);
 			}
 		});
+		quickAccess.SelectionChanged += (a, e) => {
+
+		};
 		quickAccess.MouseEvD(new() {
+			[(int)Button1Pressed] = e => {
+				var y = e.MouseEvent.Y;
+
+				var row = y + quickAccess.ScrollOffsetVertical;
+				var rowObj = quickAccess.GetObjectOnRow(row);
+				if(rowObj == null) {
+					return;
+				}
+				if(rowObj == quickAccess.SelectedObject) {
+					if(quickAccess.IsExpanded(rowObj)) {
+						quickAccess.Collapse(rowObj);
+					} else {
+						quickAccess.Expand(rowObj);
+					}
+				}
+				quickAccess.SelectedObject = rowObj;
+				quickAccess.SetNeedsDisplay();
+				e.Handled = true;
+			},
+			[(int)Button1Clicked] = e => {
+				e.Handled = true;
+			},
+			[(int)Button1Released] = e => {
+
+				var y = e.MouseEvent.Y;
+
+				var row = y + quickAccess.ScrollOffsetVertical;
+				var rowObj = quickAccess.GetObjectOnRow(row);
+				if(rowObj != quickAccess.SelectedObject) {
+					return;
+				}
+				if(quickAccess.IsExpanded(quickAccess.SelectedObject)) {
+					quickAccess.Collapse(quickAccess.SelectedObject);
+				} else {
+					quickAccess.Expand(quickAccess.SelectedObject);
+				}
+				e.Handled = true;
+			},
 			[(int)Button3Pressed] = e => {
 				var prevObj = quickAccess.SelectedObject;
 				var y = e.MouseEvent.Y;
@@ -173,13 +224,7 @@ public class HomeSession {
 	}
 	//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
 	public static IEnumerable<MenuItem> GetSpecificActions (TreeView<IFileTree> quickAccess, Main main, int row, IFileTree obj) {
-		var path = obj switch {
-			LibraryItem li => li.path,
-			LibraryLeaf ll => ll.path,
-			PinItem pi => pi.path
-		};
-
-		var pathItem = path == null ? null : main.ctx.GetPathItem(path, ExploreSession.GetStaticProps);
+		var pathItem = obj is IFilePath{path:{ }p } ? main.ctx.GetPathItem(p, ExploreSession.GetStaticProps) : null;
 		return [
 			new MenuItem("Cancel", null, () => { }),
 				..(obj switch {
@@ -216,7 +261,7 @@ public class HomeSession {
 		}
 		IEnumerable<MenuItem> GetNodeActions (LibraryLeaf node) {
 			foreach(var it in GetPathActions(node.path)) yield return it;
-			yield return new MenuItem("Hide", null, () => {
+			yield return new MenuItem("Ignore", null, () => {
 
 			});
 		}
@@ -258,50 +303,46 @@ public record QuickAccessTree : ITreeBuilder<IFileTree> {
 		];
 	}
 
-	public AspectGetterDelegate<IFileTree> AspectGetter = node => node switch {
-		TreeRoot root => root.name,
-		LibraryRoot lib => lib.name,
-		LibraryItem item => item.name,
-		LibraryLeaf leaf => leaf.name,
-		PinItem pin => Path.GetFileName(pin.path),
-		RecentItem rec => rec.name,
-		_ => "Node"
-	};
+	public AspectGetterDelegate<IFileTree> AspectGetter = node => node.name;
 	public bool SupportsCanExpand => true;
 	public bool CanExpand (IFileTree i) => GetChildren(i).Any();
 	public IEnumerable<IFileTree> GetChildren (IFileTree i) => i switch {
 		TreeRoot root => root.items,
 		LibraryRoot lib => lib.links,
-		LibraryItem item when Directory.Exists(item.path) => GetLeaves(item.path),
-		LibraryLeaf leaf when Directory.Exists(leaf.path) => GetLeaves(leaf.path),
-		PinItem pi => [],
+
+		IFilePath { path: { }path } when Directory.Exists(path) => GetLeaves(path),
 		_ => []
 	};
 	public IEnumerable<LibraryLeaf> GetLeaves(string path) =>
 		Directory.GetDirectories(path).Concat(Directory.GetFiles(path)).Select(path => new LibraryLeaf(path));
 }
-public interface IFileTree { }
+public interface IFileTree {
+	string name { get; }
+}
 public interface  IFilePath {
     string path { get; }
 }
 public record TreeRoot (string name, IFileTree[] items) : IFileTree { }
-public record PinItem(string path) : IFileTree, IFilePath {}
+public record PinItem(string path) : IFileTree, IFilePath {
+	public string name { get; set; } = Path.GetFileName(path);
+}
 
 public record RecentItem (string path, DateTime lastAccess) : IFileTree, IFilePath {
-
-	public string name = Path.GetDirectoryName(path) is { } ? Path.GetFileName(path) : path;
+	public string name { get; set; } = Path.GetDirectoryName(path) is { } ? Path.GetFileName(path) : path;
 }
 public record LibraryRoot() : IFileTree {
-	public string name;
 	public List<LibraryItem> links = new();
-	public LibraryRoot (string name) : this() { this.name = name; }
+	public string name { get; set; } = "";
+
+	public LibraryRoot(string name) : this() { this.name = name; }
+
 }
 public record LibraryItem (string path, bool visible) : IFileTree, IFilePath {
-	public string name = Path.GetDirectoryName(path) is { } ? Path.GetFileName(path) : path;
+	public string name { get; set; } = path is { }p ? (Path.GetDirectoryName(p) is { } ? Path.GetFileName(p) : p) : ".";
 	public LibraryItem () : this(null, false) { }
 }
 public record LibraryLeaf (string path) : IFileTree, IFilePath {
-	public string name = Path.GetFileName(path);
+	public string name { get; set; } = Path.GetFileName(path);
 }
 public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : IListDataSource where T:class {
 	public int Count => list.Count;

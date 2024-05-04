@@ -20,8 +20,10 @@ public static class Props {
 		IS_LOCKED = new Prop("locked", "Locked"),
 		IS_FILE = new Prop("file", "File"),
 		IS_DIRECTORY = new Prop("directory", "Directory"),
-		IS_STAGED = new Prop("gitStagedChanges", "- Staged Changes"),
-		IS_UNSTAGED = new Prop("gitUnstagedChanges", "- Unstaged Changes"),
+		IS_GIT_STAGED = new Prop("gitStagedChanges", "- Staged Changes"),
+		IS_GIT_UNSTAGED = new Prop("gitUnstagedChanges", "- Unstaged Changes"),
+		IS_GIT_IGNORED = new Prop("gitIgnored", "- Git ignored"),
+
 		IS_SOLUTION = new Prop("visualStudioSolution", "Visual Studio Solution"),
 		IS_REPOSITORY = new Prop("gitRepositoryRoot", "Git Repository"),
 		IS_ZIP = new Prop("zipArchive", "Zip Archive"),

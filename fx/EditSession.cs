@@ -28,15 +28,6 @@ public class EditSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		var editList = new FrameView() {
-			Title = "Opened",
-			BorderStyle = LineStyle.Single,
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill()
-		};
-
 		/*
 		var save = new Button() {
 			AutoSize = false,
@@ -50,14 +41,28 @@ public class EditSession {
 		};
 		*/
 
-		var pane = new View() {
+		var tree = new QuickAccessTree();
+		var quickAccess = new TreeView<IFileTree>() {
+			Title = "Quick Access",
+			BorderStyle = LineStyle.Single,
 			X = 0,
+			Y = 0,
+			Width = 24,
+			Height = Dim.Fill(),
+			TreeBuilder = tree,
+			AspectGetter = tree.AspectGetter
+		};
+
+		quickAccess.AddObjects(tree.GetRoots(main));
+		foreach(var t in quickAccess.Objects)
+			quickAccess.Expand(t);
+		var right = new View() {
+			X = 24,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			BorderStyle = LineStyle.Single
 		};
-
 		var mode = new Label() {
 			AutoSize = false,
 			X = Pos.AnchorEnd(4),
@@ -66,7 +71,6 @@ public class EditSession {
 			Height = 1,
 			Text = "EDIT",
 		};
-
 		var address = new Label() {
 			AutoSize = false,
 			X = 0,
@@ -75,7 +79,6 @@ public class EditSession {
 			Height = 1,
 		};
 		address.Text = path;
-
 		var lineNumbers = new Label() {
 			AutoSize = false,
 			X = 0,
@@ -93,12 +96,63 @@ public class EditSession {
 
 			ColorScheme = Application.Top.ColorScheme with {
 				Focus = new(Color.White, new Color(25,25,25))
+			},
+		};
+		quickAccess.ObjectActivated += (o, e) => {
+			if(e.ActivatedObject is IFilePath { path: { } p }) {
+				path = p;
+				RefreshFile();
 			}
 		};
-
+		quickAccess.KeyDownD(value: new() {
+			['"'] = _ => {
+				if(quickAccess.SelectedObject is IFilePath item && File.Exists(item.path)) {
+					ExploreSession.ShowPreview($"Preview: {item.path}", File.ReadAllText(item.path));
+				}
+			},
+			['?'] = _ => {
+				if(quickAccess.SelectedObject is IFilePath item) {
+					ExploreSession.ShowProperties(main.ctx.GetPathItem(item.path, ExploreSession.GetStaticProps));
+				}
+			},
+			['/'] = _ => {
+				var rowObj = quickAccess.SelectedObject;
+				var (row, col) = quickAccess.GetObjectPos(rowObj) ?? (0, 0);
+				SView.ShowContext(quickAccess, [.. HomeSession.GetSpecificActions(quickAccess, main, row, rowObj)], row + 2, col + 2);
+			},
+			['<'] = e => {
+				e.Handled = true;
+				main.folder.SwitchTab(-1);
+			},
+			['>'] = e => {
+				e.Handled = true;
+				main.folder.SwitchTab(1);
+			}
+		});
+		quickAccess.MouseEvD(new() {
+			[(int)Button3Pressed] = e => {
+				var prevObj = quickAccess.SelectedObject;
+				var y = e.MouseEvent.Y;
+				var row = y + quickAccess.ScrollOffsetVertical;
+				var rowObj = quickAccess.GetObjectOnRow(row);
+				var c = SView.ShowContext(quickAccess, [.. HomeSession.GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.X);
+				if(row < main.ctx.fx.libraryData.Count) {
+					c.MenuBar.MenuAllClosed += (a, e) => {
+						if(main.ctx.fx.libraryData.Count == 0) {
+							return;
+						}
+						if(quickAccess.GetParent(prevObj) != null) {
+							quickAccess.SelectedObject = prevObj;
+						} else {
+							//TODO: Find suitable dest
+						}
+					};
+				}
+				e.Handled = true;
+			}
+		});
 		textView.TextChanged += (a, e) => RefreshLines();
 		var prevTopRow = 0;
-
 		textView.DrawContentComplete += (a, e) => {
 			if(textView.TopRow == prevTopRow) {
 				return;
@@ -136,7 +190,9 @@ public class EditSession {
 			lineNumbers.Text = string.Join("\n", Enumerable.Range(textView.TopRow, textView.Frame.Height).Select(l => $"{l,4}| "));
 		}
 		void RefreshFile() {
-			textView.Text = File.ReadAllText(path);
+			address.Text = path;
+			var data = File.ReadAllText(path);
+			textView.Text = data;
 		}
 		void RefreshMode () {
 			mode.Text = textView.ReadOnly ? "READ" : "EDIT";
@@ -151,7 +207,6 @@ public class EditSession {
 			}
 		});
 		*/
-
 		textView.KeyDownD(new() {
 			[(int)Esc] = e => {
 				e.Handled = true;
@@ -261,7 +316,7 @@ public class EditSession {
 			},
 		});
 		textView.CursorPosition = new(col, row);
-		SView.InitTree([pane, address, mode, /* save, */lineNumbers, textView]);
-		SView.InitTree([root, pane]);
+		SView.InitTree([right, address, mode, /* save, */lineNumbers, textView]);
+		SView.InitTree([root, quickAccess, right]);
 	}
 }

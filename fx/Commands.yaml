@@ -10,14 +10,14 @@
     file:
       - ext: docx
 
-- name: Open GitHub
-  fmt: cd {0} & gh repo view --web
-  targetAny:
-    dir:
-      - dir:
-        - name: .git
-        - name: .github
-  #tag: GitHub Repository
+#- name: Open GitHub
+#  fmt: cd {0} & gh repo view --web
+#  targetAny:
+#    dir:
+#      - dir:
+#        - name: .git
+#        - name: .github
+#  #tag: GitHub Repository
 - name: Run C#
   fmt: dotnet run
   cd: true

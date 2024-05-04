@@ -255,7 +255,8 @@ public class Main {
 		]);
 		IEnumerable<MenuBarItem> GetBarItems () {
 			yield return new MenuBarItem("_Fx", [
-				new MenuItem("Reload", "", ctx.ResetCommands)
+				new MenuItem("Reload", null, ctx.ResetCommands),
+				new MenuItem("Preferences", null, () => { })
 			]) { CanExecute = () => true };
 			yield return new MenuBarItem("_Switch", [
 				..folder.tabsList.Select(t => new MenuItem(t.name, null, () => folder.FocusTab(t)))
@@ -327,6 +328,9 @@ public record Fx {
 	public HashSet<string> locked = new();
 	public ConcurrentDictionary<string, int> timesOpened = new();
 	public Dictionary<string, DateTime> lastOpened = new();
+
+
+	ConcurrentDictionary<string, PathItem> pathCache = new();
 
 	public List<string> pins = new();
 	public string workroot = null; //move to ExplorerSession
