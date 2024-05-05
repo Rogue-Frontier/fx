@@ -74,7 +74,7 @@ try {
 	if(expl)
 		main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
 
-	if(true) {
+	if(false) {
 
 		CmdInfo[] cmdList = [.. CmdStd.GetCmds()];
 		Dialog d = new Dialog() {
