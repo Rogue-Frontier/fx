@@ -130,6 +130,44 @@ public class EditSession {
 			}
 		});
 		quickAccess.MouseEvD(new() {
+			[(int)Button1Pressed] = e => {
+				var y = e.MouseEvent.Y;
+
+				var row = y + quickAccess.ScrollOffsetVertical;
+				var rowObj = quickAccess.GetObjectOnRow(row);
+				if(rowObj == null) {
+					return;
+				}
+				if(rowObj == quickAccess.SelectedObject) {
+					if(quickAccess.IsExpanded(rowObj)) {
+						quickAccess.Collapse(rowObj);
+					} else {
+						quickAccess.Expand(rowObj);
+					}
+				}
+				quickAccess.SelectedObject = rowObj;
+				quickAccess.SetNeedsDisplay();
+				e.Handled = true;
+			},
+			[(int)Button1Clicked] = e => {
+				e.Handled = true;
+			},
+			[(int)Button1Released] = e => {
+
+				var y = e.MouseEvent.Y;
+
+				var row = y + quickAccess.ScrollOffsetVertical;
+				var rowObj = quickAccess.GetObjectOnRow(row);
+				if(rowObj != quickAccess.SelectedObject) {
+					return;
+				}
+				if(quickAccess.IsExpanded(quickAccess.SelectedObject)) {
+					quickAccess.Collapse(quickAccess.SelectedObject);
+				} else {
+					quickAccess.Expand(quickAccess.SelectedObject);
+				}
+				e.Handled = true;
+			},
 			[(int)Button3Pressed] = e => {
 				var prevObj = quickAccess.SelectedObject;
 				var y = e.MouseEvent.Y;

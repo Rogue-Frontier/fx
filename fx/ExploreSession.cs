@@ -28,6 +28,7 @@ using System.IO;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using System.Text.RegularExpressions;
+using EnumerableExtensions;
 namespace fx;
 public class ExploreSession {
 	public View root;
@@ -143,42 +144,49 @@ public class ExploreSession {
 		goLeft = new Label() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
 		goTo   = new Label() { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
 
-		ConcurrentDictionary<PathItem, string> entryCache = new();
 		cwdData = new(new(), (p, i) => p.entry);
 
 		var sortName = new Label() {
-			Text = "Name",
+			Text = "name",
 			AutoSize = false,
 			X = 7,
 			Y = 1,
 			Width = 32
 		};
 		var sortSize = new Label() {
-			Text = "LogSize",
+			Text = "logSize",
 			AutoSize = false,
 			X = Pos.Right(sortName),
 			Y = 1,
 			Width = 8
 		};
 		var sortType = new Label() {
-			Text = "Type",
+			Text = "type",
 			AutoSize = false,
 			X = Pos.Right(sortSize),
 			Y = 1,
 			Width = 12
 		};
-		var sortAccessed = new Label() {
-			Text = "Accessed",
+		var sortAccessedDate = new Label() {
+			Text = "accessed",
 			AutoSize = false,
 			X = Pos.Right(sortType),
 			Y = 1,
 			Width = 12
 		};
 
-		var sortGit = new Label() {
-			Text = "Git",
+		var sortAccessedFreq = new Label() {
+			Text = "freq",
 			AutoSize = false,
-			X = Pos.Right(sortAccessed),
+			X = Pos.Right(sortAccessedDate),
+			Y = 1,
+			Width = 6
+		};
+
+		var sortGit = new Label() {
+			Text = "repo",
+			AutoSize = false,
+			X = Pos.Right(sortAccessedFreq),
 			Y = 1,
 			Width = 8
 		};
@@ -200,7 +208,7 @@ public class ExploreSession {
 		RefreshPads();
 		void InitTreeLocal () {
 			SView.InitTree(
-				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortType, sortAccessed, sortGit, pathList],
+				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortType, sortAccessedDate, sortAccessedFreq, sortGit, pathList],
 				[root, addressBar, quickAccess, pathPane]
 				);
 		}
@@ -244,7 +252,42 @@ public class ExploreSession {
 			});
 			quickAccess.MouseEvD(new() {
 				[(int)Button1Pressed] = e => {
-					//Ctrl+Click open new tab
+					var y = e.MouseEvent.Y;
+
+					var row = y + quickAccess.ScrollOffsetVertical;
+					var rowObj = quickAccess.GetObjectOnRow(row);
+					if(rowObj == null) {
+						return;
+					}
+					if(rowObj == quickAccess.SelectedObject) {
+						if(quickAccess.IsExpanded(rowObj)) {
+							quickAccess.Collapse(rowObj);
+						} else {
+							quickAccess.Expand(rowObj);
+						}
+					}
+					quickAccess.SelectedObject = rowObj;
+					quickAccess.SetNeedsDisplay();
+					e.Handled = true;
+				},
+				[(int)Button1Clicked] = e => {
+					e.Handled = true;
+				},
+				[(int)Button1Released] = e => {
+
+					var y = e.MouseEvent.Y;
+
+					var row = y + quickAccess.ScrollOffsetVertical;
+					var rowObj = quickAccess.GetObjectOnRow(row);
+					if(rowObj != quickAccess.SelectedObject) {
+						return;
+					}
+					if(quickAccess.IsExpanded(quickAccess.SelectedObject)) {
+						quickAccess.Collapse(quickAccess.SelectedObject);
+					} else {
+						quickAccess.Expand(quickAccess.SelectedObject);
+					}
+					e.Handled = true;
 				},
 				[(int)Button3Pressed] = e => {
 					var prevObj = quickAccess.SelectedObject;
@@ -263,6 +306,9 @@ public class ExploreSession {
 								//TODO: Find suitable dest
 							}
 						};
+					} else {
+
+						return;
 					}
 					e.Handled = true;
 				}
@@ -305,7 +351,7 @@ public class ExploreSession {
 				RefreshDirListing(cwd);
 				pathList.SetNeedsDisplay();
 			};
-			sortAccessed.MouseClick += (a, e) => {
+			sortAccessedDate.MouseClick += (a, e) => {
 				pathSort =
 					pathSort.f == GetLastAccess ?
 						pathSort with { reverse = !pathSort.reverse } :
@@ -337,8 +383,11 @@ public class ExploreSession {
 					var prev = pathList.SelectedItem;
 
 					var i = pathList.TopItem + e.MouseEvent.Y;
-					if(i >= cwdData.Count)
+					if(i >= cwdData.Count) {
+						ShowPathContext(GetPathItem(cwd), e.MouseEvent.Y - 1, e.MouseEvent.X - 1);
+						e.Handled = true;
 						return;
+					}
 					pathList.SelectedItem = i;
 					var c = ShowPathContext(cwdData.list[i], e.MouseEvent.Y - 1, e.MouseEvent.X);
 					c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
@@ -371,6 +420,9 @@ public class ExploreSession {
 					'G' | (int)CtrlMask => () => {
 						//Grep
 					},
+
+					' ' => () => { },
+
 					'[' => () => GoPrev(),
 					']' => () => GoNext(),
 					'\\' => () => GoLeft(),
@@ -386,9 +438,13 @@ public class ExploreSession {
 						});
 					},
 					':' => () => main.FocusTerm(pathList),
+					';' => () => {
+						cwdData.Toggle(pathList.SelectedItem);
+						pathList.SetNeedsDisplay();
+						return;
+					},
 					'\'' => () => {
 						//Copy file
-						return;
 					},
 					'"' => () => {
 						if(!GetItem(out var p)) return;
@@ -608,16 +664,16 @@ public class ExploreSession {
 		}
 		var cmd = e.text;
 		//Replace {0} with the first marked path
-		string[] args = cwdData.list.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
-		if(!args.Any()) {
-			args = [.. cwdData.list.Select(p => p.local)];
-		} else {
-			//cmd = string.Format(cmd, cwdData[pathList.SelectedItem].local);
-		}
-		cmd = string.Format(cmd, args);
+		string[] selected = cwdData.list.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
 
-		cmd = cmd.Replace("%this%", cwdData.list[pathList.SelectedItem].local);
-		//cmd = cmd.Replace("%all%", string.Join(" ", args));
+		var args =
+			selected.Any() ?
+				selected :
+				[..from item in cwdData.list select item.local];
+		cmd = string.Format(cmd, args);
+		cmd = cmd.Replace("%select%", string.Join(" ", from s in selected select $@"""{s}"""));
+		cmd = cmd.Replace("%here%", $@"""{cwdData.list[pathList.SelectedItem].local}""");
+		cmd = cmd.Replace("%all%", string.Join(" ", [.. from item in cwdData.list select $@"""{item.local}"""]));
 
 		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
 			dest = Environment.ExpandEnvironmentVariables(dest);
@@ -633,6 +689,7 @@ public class ExploreSession {
 		if(cmd is { Length:0 } or null) {
 			return;
 		}
+		main.ctx.fx.commandFreq.GetOrAdd(cwd, []).AddOrUpdate(cmd, 1, (_, n) => n + 1);
 
 		bool readProc = false;
 		var pi = new ProcessStartInfo("cmd.exe") {
@@ -687,6 +744,7 @@ public class ExploreSession {
 	/// <returns></returns>
 	public static Process RunCmd (string cmd, string cwd = null) {
 		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Executables")}'";
+
 		var cmdArgs = @$"/c {cmd} & pause";
 		var pi = new ProcessStartInfo("cmd.exe") {
 			Arguments = $"{cmdArgs}",
@@ -772,6 +830,7 @@ public class ExploreSession {
 			new MenuItem("Command", null, () => {
 				RequestName("Command", cmd => {
 					cmd = string.Format(cmd, item.path);
+					main.ctx.fx.commandFreq.GetOrAdd(item.path, []).AddOrUpdate(cmd, 1, (_, n) => n + 1);
 					RunCmd(cmd);
 					return true;
 				});
@@ -931,7 +990,7 @@ public class ExploreSession {
 		);
 		var hidden = main.ctx.fx.hidden;
 		var isHidden = hidden.Contains(item.path);
-		yield return new MenuItem(isHidden ? "Show" : "Ignore", null, () => {
+		yield return new MenuItem(isHidden ? "Show" : "Hide", null, () => {
 			((Func<string, bool>)(isHidden ? hidden.Remove : hidden.Add))(item.path);
 			main.FilesChanged([item.path]);
 		});
@@ -1124,15 +1183,20 @@ public class ExploreSession {
 		.. GetStaticActions (main, item)
 	];
 	public IEnumerable<MenuItem> GetGroupActions (Main main, PathItem[] items) =>
-		[new MenuItem("Cancel", "", () => { }),
-		.. GetStaticGroupActions(main, items)
+		[
+			new MenuItem("Cancel", null, () => { }),
+			new MenuItem("Deselect", null, () => {
+				cwdData.marked.Clear();
+				pathList.SetNeedsDisplay();
+			}),
+			.. GetStaticGroupActions(main, items)
 	];
-	public IEnumerable<MenuItem> GetStaticGroupActions(Main main, PathItem[] items) {
+	public static IEnumerable<MenuItem> GetStaticGroupActions(Main main, PathItem[] items) {
 		yield return new MenuItem("Compress", null, () => {
 			RequestName("Archive Name", name => {
 				using var f = File.Create(name);
 				using var zip = new ZipArchive(f, ZipArchiveMode.Create);
-				var par = Directory.GetParent(items[0].path).FullName;
+				var par = Directory.GetParent(items.First().path).FullName;
 				foreach(var item in items) {
 					if(item.dir) {
 						var subitems =
@@ -1148,6 +1212,15 @@ public class ExploreSession {
 				}
 				return true;
 			}, $"{items[0].path}/{items[0].local}.zip");
+		});
+		yield return new MenuItem("Hide All", null, () => {
+			main.ctx.fx.hidden.UnionWith(from item in items select item.path);
+			main.FilesChanged([..from item in items select item.path]);
+		});
+		yield return new MenuItem("Show All", null, () => {
+
+			main.ctx.fx.hidden.ExceptWith(from item in items select item.path);
+			main.FilesChanged([.. from item in items select item.path]);
 		});
 	}
 
@@ -1309,7 +1382,8 @@ public class ExploreSession {
 			var size = $"{e.Length/1024}".PadRight(8);
 			var type = (p.dir ? "Dir" : "File").PadRight(12);
 			var lastWrite = e.LastWriteTime.ToString("MM/dd HH:mm").PadRight(12);
-			return $"{i,3}| {name}{size}{type}{lastWrite}";
+			var timesOpened = 0.ToString().PadLeft(6);
+			return $"{i,3}| {name}{size}{type}{lastWrite}{timesOpened}";
 		} else {
 			var name = localName.PadRight(len.name);
 			var size = $"{GetSize(p)}".PadRight(8);
@@ -1406,6 +1480,7 @@ public class ExploreSession {
 					"file"
 					).PadRight(12);
 			var lastWrite = File.GetLastWriteTime(p.path).ToString("MM/dd HH:mm").PadRight(12);
+			var openFreq = main.ctx.fx.timesOpened.GetValueOrDefault(p.path, 0).ToString().PadLeft(4).PadRight(6);
 			var gitInfo =
 				(p.HasProp(IS_GIT_UNSTAGED) ?
 					$"{new GlyphDefinitions().UnChecked}" ://"\u2574" :
@@ -1414,7 +1489,7 @@ public class ExploreSession {
 				//p.HasProp(IS_REPOSITORY) ? "*" :
 
 					"").PadRight(8);
-			return $"{i,3}| {name}{size}{type}{lastWrite}{gitInfo}";
+			return $"{i,3}| {name}{size}{type}{lastWrite}{openFreq}{gitInfo}";
 		}
 	}
 
@@ -1423,10 +1498,13 @@ public class ExploreSession {
 			if(s == Path.GetFullPath("%APPDATA%/fx/libraries/")) {
 				return;
 			}
-
 			PathItem transform (PathItem item) {
 				var path = Path.GetFullPath(item.path);
 				try {
+					if(0 != (File.GetAttributes(path) & FileAttributes.System)) {
+						return null;
+					}
+
 					while(Directory.Exists(path) && Directory.GetFileSystemEntries(path) is [string sub])
 						path = sub;
 				} catch(UnauthorizedAccessException e) { return null; }
@@ -1452,6 +1530,11 @@ public class ExploreSession {
 						.OrderPath(pathSort)
 				];
 			} else {
+
+				if(0 != (File.GetAttributes(s) & FileAttributes.System)) {
+					return;
+				}
+
 				var up = new Lazy<PathItem>(() => {
 					return Path.GetDirectoryName(s) is { } u ? new PathItem("..", u, [.. GetProps(u)]) : null;
 				}).Value;
@@ -1473,15 +1556,15 @@ public class ExploreSession {
 				IEnumerable<PathItem> items = [
 					up, upper,
 					..Directory.GetDirectories(s)
-						.Except(main.ctx.fx.hidden)
 						.Select(GetPathItem)
 						.Select(transform)
 						.Except([null])
+						.Except(p => main.ctx.fx.hidden.Contains(p.path))
 						.MaybeWhere(f)
 						.OrderPath(pathSort),
 					..Directory.GetFiles(s)
-						.Except(main.ctx.fx.hidden)
 						.Select(GetPathItem)
+						.Except(p => main.ctx.fx.hidden.Contains(p.path))
 						.MaybeWhere(f)
 						.OrderPath(pathSort)
 				];
@@ -1521,7 +1604,7 @@ public class ExploreSession {
 		}
 		showCwd = showCwd.Replace(userProfile, USER_PROFILE_MASK);
 		cwdChanged?.Invoke(showCwd);
-		Console.Title = showCwd;
+		Console.Title = $"[fx] {showCwd}";
 		pathList.SelectedItem = Math.Min(Math.Max(0, pathList.Source.Count - 1), lastIndex.GetValueOrDefault(cwd, 0));
 		pathList.SetNeedsDisplay();
 	}

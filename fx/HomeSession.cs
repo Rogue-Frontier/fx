@@ -11,6 +11,8 @@ using Terminal.Gui;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using GDShrapt.Reader;
+using System.Runtime.Serialization;
+using YamlDotNet.Core.Tokens;
 namespace fx;
 public class HomeSession {
 	public View root;
@@ -40,19 +42,19 @@ public class HomeSession {
 		foreach(var t in quickAccess.Objects)
 			quickAccess.Expand(t);
 		quickAccess.ObjectActivated += (o, e) => {
-			if(e.ActivatedObject is IFilePath item) {
+			if(e.ActivatedObject is IFilePath {exists:true } item) {
 				main.folder.AddTab("Expl", new ExploreSession(main, item.path).root, true);
 			}
 		};
 		quickAccess.KeyDownD(value: new() {
 			[(int)Enter | (int)ShiftMask] = _ => {
-				if(quickAccess.SelectedObject is IFilePath { path: { } p } && Directory.Exists(p)) {
+				if(quickAccess.SelectedObject is IFilePath { exists:true, path: { } p } && Directory.Exists(p)) {
 					main.folder.AddTab("Expl", new ExploreSession(main, p).root, false, root);
 				}
 				return;
 			},
 			['"'] = _ => {
-				if(quickAccess.SelectedObject is IFilePath {path:{ }p } && Path.Exists(p)) {
+				if(quickAccess.SelectedObject is IFilePath { exists:true, path:{ }p }) {
 					ExploreSession.ShowPreview($"Preview: {p}",
 						Directory.Exists(p)?
 							string.Join('\n', Directory.GetFileSystemEntries(p).Select(d => d[(p.Length+1)..])) :
@@ -61,7 +63,7 @@ public class HomeSession {
 				}
 			},
 			['?'] = _ => {
-				if(quickAccess.SelectedObject is IFilePath item) {
+				if(quickAccess.SelectedObject is IFilePath {exists:true } item) {
 					ExploreSession.ShowProperties(ctx.GetPathItem(item.path, ExploreSession.GetStaticProps));
 				}
 			},
@@ -224,7 +226,7 @@ public class HomeSession {
 	}
 	//https://stackoverflow.com/questions/13079569/how-do-i-get-the-path-name-from-a-file-shortcut-getting-exception/13079688#13079688
 	public static IEnumerable<MenuItem> GetSpecificActions (TreeView<IFileTree> quickAccess, Main main, int row, IFileTree obj) {
-		var pathItem = obj is IFilePath{path:{ }p } ? main.ctx.GetPathItem(p, ExploreSession.GetStaticProps) : null;
+		var pathItem = obj is IFilePath{ exists:true, path:{ }p } ? main.ctx.GetPathItem(p, ExploreSession.GetStaticProps) : null;
 		return [
 			new MenuItem("Cancel", null, () => { }),
 				..(obj switch {
@@ -298,7 +300,7 @@ public record QuickAccessTree : ITreeBuilder<IFileTree> {
 				..DriveInfo.GetDrives().Select(d => new LibraryItem(d.Name, true))
 			]),
 			new TreeRoot("Recent", [
-				..main.ctx.fx.lastOpened.OrderBy(p => p.Value).Select(p => new RecentItem(p.Key, p.Value))
+				..main.ctx.fx.lastOpened.OrderByDescending(p => p.Value).Select(p => new RecentItem(p.Key, p.Value))
 			])
 		];
 	}
@@ -313,22 +315,45 @@ public record QuickAccessTree : ITreeBuilder<IFileTree> {
 		IFilePath { path: { }path } when Directory.Exists(path) => GetLeaves(path),
 		_ => []
 	};
-	public IEnumerable<LibraryLeaf> GetLeaves(string path) =>
-		Directory.GetDirectories(path).Concat(Directory.GetFiles(path)).Select(path => new LibraryLeaf(path));
+	public IEnumerable<LibraryLeaf> GetLeaves(string path) {
+
+		IEnumerable<string> entries;
+
+		if((File.GetAttributes(path) & FileAttributes.System) != 0) {
+			yield break;
+		}
+
+		try { entries = [..Directory.GetDirectories(path), ..Directory.GetFiles(path)]; }
+		catch(Exception e) { entries = []; }
+		foreach(var p in entries) {
+			LibraryLeaf l;
+			try { l = new LibraryLeaf(p); }
+			catch(Exception e) { continue; }
+			yield return l;
+		}
+	}
 }
 public interface IFileTree {
 	string name { get; }
+
+	static string GetPathName(string path) =>
+		(path == Path.GetPathRoot(path) ?
+			path :
+			$"{(!Path.Exists(path) ? "!" : "")}{(Path.GetDirectoryName(path) is { } par ?
+					(par == Path.GetPathRoot(path) ? par : $"{Path.GetFileName(par)}/") :
+					Path.GetPathRoot(path))}{Path.GetFileName(path)}").Replace("\\", "/");
 }
 public interface  IFilePath {
     string path { get; }
+	public bool exists => Path.Exists(path);
 }
 public record TreeRoot (string name, IFileTree[] items) : IFileTree { }
 public record PinItem(string path) : IFileTree, IFilePath {
-	public string name { get; set; } = Path.GetFileName(path);
+	public string name { get; set; } = IFileTree.GetPathName(path);
 }
 
 public record RecentItem (string path, DateTime lastAccess) : IFileTree, IFilePath {
-	public string name { get; set; } = Path.GetDirectoryName(path) is { } ? Path.GetFileName(path) : path;
+	public string name { get; set; } = IFileTree.GetPathName(path);
 }
 public record LibraryRoot() : IFileTree {
 	public List<LibraryItem> links = new();
@@ -338,7 +363,9 @@ public record LibraryRoot() : IFileTree {
 
 }
 public record LibraryItem (string path, bool visible) : IFileTree, IFilePath {
-	public string name { get; set; } = path is { }p ? (Path.GetDirectoryName(p) is { } ? Path.GetFileName(p) : p) : ".";
+	public bool exists => Path.Exists(path);
+	public string name { get; set; } = path is { } p ?
+		IFileTree.GetPathName(path) : "!";
 	public LibraryItem () : this(null, false) { }
 }
 public record LibraryLeaf (string path) : IFileTree, IFilePath {
@@ -375,6 +402,11 @@ public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : ILis
 			return;
 		}
 		((Func<T, bool>)(value ? marked.Add : marked.Remove))(list[item]);
+	}
+	public void Toggle(int item) {
+		if(item < 0 || item >= list.Count) return;
+		var v = list[item];
+		((Func<T, bool>)(marked.Contains(v) ? marked.Remove : marked.Add))(v);
 	}
 	public IList ToList () => list;
 }

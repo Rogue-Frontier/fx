@@ -40,6 +40,8 @@ using Calendar = fx.Calendar;
 using Google.Apis.Auth.OAuth2;
 using Color = Terminal.Gui.Color;
 using static fx.ExploreSession;
+using System.Runtime.Serialization;
+using System.Security.Cryptography.X509Certificates;
 
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
@@ -72,8 +74,188 @@ try {
 	if(expl)
 		main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
 
+	if(true) {
+
+		CmdInfo[] cmdList = [.. CmdStd.GetCmds()];
+		Dialog d = new Dialog() {
+			Title = "Command Builder",
+		};
+		d.ColorScheme = Application.Top.ColorScheme with {
+			Normal = new Attribute(Color.White, Color.Black),
+			Focus = new Attribute(Color.White, Color.Black)
+		};
+
+
+
+		Pos X = 1;
+		Pos Y = 1;
+
+		var _cmd = new Button() {
+			Text = "$ <command>",
+			AutoSize = false,
+			X = X,
+			Y = Y,
+			Width = 12,
+			Height = 1,
+			NoDecorations = true,
+			NoPadding = true,
+			TextAlignment = TextAlignment.Left
+		};
+		d.Add([_cmd]);
+
+		_cmd.MouseClick += (a, e) => {
+			CmdStd.ICmdModel result = null;
+			var context = new ContextMenu() {
+				Position = new Point(d.Frame.X + _cmd.Frame.X + 1, d.Frame.Y + _cmd.Frame.Y + 1),
+				MenuItems = new MenuBarItem([
+					..from cmd in cmdList select new MenuItem(cmd.name, null, () => {
+						result = (CmdStd.ICmdModel)cmd.t.GetConstructor(BindingFlags.Instance | BindingFlags.Public, [])!.Invoke([]);
+						_cmd.Width = cmd.name.Length + 2;
+						_cmd.Text = $"$ {cmd.name}";
+						View[] _v = [..d.Subviews.Take(d.Subviews.IndexOf(_cmd) + 1)];
+						d.RemoveAll();
+						d.Add(_v);
+						Pos X = _cmd.X + 2;
+						Pos Y = Pos.Bottom(_cmd);
+						foreach(var part in cmd.parts){
+							((Action)(part switch {
+								FlagInfo flag => () => {
+									var b = new CheckBox(){
+										Text = flag.att.name,
+										X = X,
+										Y = Y,
+									};
+									/*
+									var label = new Label(){
+										Text = flag.doc,
+										AutoSize = false,
+										X = 16,
+										Y = Y,
+										Width = Dim.Fill(),
+										Height = flag.doc.Count(c => c == '\n') + 1
+									};
+									*/
+									b.Toggled += (a, e) => flag.field.SetValue(result, e.NewValue);
+									d.Add([b, /*label*/]);
+									Y = Pos.Bottom(b);
+								},
+								RadioInfo radio => () => {
+									var radioresult = radio.field.FieldType.GetConstructor([]).Invoke([]);
+									radio.field.SetValue(result, radioresult);
+									FlagInfo[] flags = [..
+										from field
+										in radio.field.FieldType.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)
+										select new FlagInfo(field.GetCustomAttribute<FlagAttribute>()!, field)
+									];
+									var b = new RadioGroup() {
+										X = X,
+										Y = Y,
+										RadioLabels = [..from flag in flags select flag.field.GetCustomAttribute<FlagAttribute>()!.name],
+										Orientation = Orientation.Vertical,
+									};
+									b.SelectedItemChanged += (a, e) => {
+										if(e.PreviousSelectedItem is { }i and not -1) {
+											var ff = flags[i].field;
+											var t = ff.FieldType;
+											//todo: do not modify struct
+											ff.SetValue(radioresult, t == typeof(bool) ? false : null);
+										}
+										if(e.SelectedItem is { }j and not -1){
+
+											var ff = flags[j].field;
+											var t = ff.FieldType;
+											ff.SetValue(radioresult, t  == typeof(bool) ? true : t.GetConstructor([]).Invoke([]));
+										}
+									};
+									foreach(var flag in flags) {
+										var _X = X;
+										X += flag.name.Length + 4;
+										if(!flag.field.FieldType.IsPrimitive){
+											var subfields = flag.field.FieldType.GetFields( BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+											var subresult = flag.field.GetValue(radioresult);
+											foreach(var sub in subfields){
+												var name = sub.GetCustomAttribute<FlagAttribute>()?.name ?? sub.GetCustomAttribute<ArgAttribute>()?.name;
+												var b_sub = new CheckBox() {
+													Text = name,
+													AutoSize = false,
+													X = X,
+													Y = Y,
+													Width = name.Length + 4,
+													Height = 1,
+												};
+
+												b_sub.Toggled += (a, e) => {
+													//TODO: replace with dict lookup
+													if(subresult == null){
+														flag.field.SetValue(radioresult, subresult = Activator.CreateInstance(flag.field.FieldType));
+													}
+													sub.SetValue(subresult, e.NewValue);
+												};
+												d.Add(b_sub);
+												X = Pos.Right(b_sub);
+											}
+										}
+										X = _X;
+										Y += 1;
+									}
+									d.Add(b);
+								},
+								ArgInfo arg => () => {
+									/*
+									var l = new Label() {
+										Text = $"<{arg.name}>:",
+										AutoSize = false,
+										X = X,
+										Y = Y,
+										Width = arg.name.Length + 3,
+										Height = 1
+									};
+									*/
+									var hint = $"{arg.name}";
+									var b = new TextField(){
+										Text = hint,
+										X = X,
+										Y = Y,
+										AutoSize = false,
+										Width = 64,
+										Height = 1
+									};
+									b.Enter += (a, e) => {
+										if(b.Text == hint){
+											b.Text = "";
+										}
+									};
+									b.Leave += (a, e) => {
+										if(b.Text.Length == 0){
+											b.Text = hint;
+										}
+									};
+
+
+									d.Add([b]);
+									Y = Pos.Bottom(b);
+								},
+								CmdInfo cmd => () => {
+
+								}
+
+							}))();
+						}
+						d.SetNeedsDisplay();
+					})
+				])
+			};
+			context.Show();
+			e.Handled = true;
+		};
+		
+		Application.Run(d);
+	}
+
 	Application.Run();	
 } catch (Exception e){
+	throw;
+
 	main.ctx.Save();
 	Application.Shutdown();
 
@@ -329,6 +511,8 @@ public record Fx {
 	public ConcurrentDictionary<string, int> timesOpened = new();
 	public Dictionary<string, DateTime> lastOpened = new();
 
+	public ConcurrentDictionary<string, ConcurrentDictionary<string, int>> commandFreq = new();
+
 
 	ConcurrentDictionary<string, PathItem> pathCache = new();
 
@@ -359,7 +543,9 @@ public record Fx {
 }
 public record Ctx {
 	public static string Anonymize (string path) => path.Replace(USER_PROFILE, USER_PROFILE_MASK);
-	public static string USER_PROFILE_MASK => "%USERPROFILE%";
+	[IgnoreDataMember]
+	public static string USER_PROFILE_MASK => "%userprofile%";
+	[IgnoreDataMember]
 	public static string USER_PROFILE => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 	private Deserializer de { get; } = new Deserializer();
 	private Serializer se { get; } = new Serializer();
@@ -367,13 +553,18 @@ public record Ctx {
 	public Sln sln;
 	public Fx fx = new();
 	public ConcurrentDictionary<string, PathItem> pathData = new();
-
+	public bool save = true;
 
 	public Ctx () =>
 		ResetCommands();
 	public void Load () =>
 		fx.Load(this);
+
+
 	public void Save () {
+		if(!save) {
+			return;
+		}
 		Directory.CreateDirectory(Path.GetDirectoryName(Fx.SAVE_PATH));
 		File.WriteAllText(Fx.SAVE_PATH, se.Serialize(fx).Replace(USER_PROFILE, USER_PROFILE_MASK));
 	}
@@ -389,7 +580,7 @@ public record Ctx {
 	public IEnumerable<MenuItem> GetCommands (PathItem item) => Commands
 		.Where(c => c.Accept(item.path))
 		.Select(c => new MenuItem(c.name, "", () =>
-			ExploreSession.RunCmd(c.GetCmd(item.path), c.cd ? item.path : null)
+			RunCmd(c.GetCmd(item.path), c.cd ? item.path : null)
 		));
 	public delegate IEnumerable<IProp> GetProps (string path);
 	public PathItem GetPathItem(string path, GetProps GetProps) => pathData[path] =
