@@ -42,6 +42,9 @@ using Color = Terminal.Gui.Color;
 using static fx.ExploreSession;
 using System.Runtime.Serialization;
 using System.Security.Cryptography.X509Certificates;
+using Octokit;
+using Repo = LibGit2Sharp.Repository;
+using App = Terminal.Gui.Application;
 
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
@@ -62,7 +65,8 @@ Console.ReadLine();
 
 Run:
 
-Application.Init();
+
+App.Init();
 var main = new Main();
 bool crash = false, restart = false;
 try {
@@ -70,17 +74,17 @@ try {
 		main.ctx.Save();
 	};
 	
-	Application.Top.Add(main.root);
+	App.Top.Add(main.root);
 	if(expl)
 		main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
-
+	main.folder.AddTab("Github", new GithubSession(main, new RepoUrl("godotengine", "godot-builds")).root, true);
 	if(false) {
 
 		CmdInfo[] cmdList = [.. CmdStd.GetCmds()];
 		Dialog d = new Dialog() {
 			Title = "Command Builder",
 		};
-		d.ColorScheme = Application.Top.ColorScheme with {
+		d.ColorScheme = App.Top.ColorScheme with {
 			Normal = new Attribute(Color.White, Color.Black),
 			Focus = new Attribute(Color.White, Color.Black)
 		};
@@ -249,15 +253,15 @@ try {
 			e.Handled = true;
 		};
 		
-		Application.Run(d);
+		App.Run(d);
 	}
 
-	Application.Run();	
+	App.Run();	
 } catch (Exception e){
 	throw;
 
 	main.ctx.Save();
-	Application.Shutdown();
+	App.Shutdown();
 
 	Console.Clear();
 	Console.WriteLine(e.Message);
@@ -294,7 +298,7 @@ try {
 	}
 	*/
 	main.ctx.Save();
-	Application.Shutdown();
+	App.Shutdown();
 }
 goto Run;
 public class Main {
@@ -323,7 +327,7 @@ public class Main {
 			TabStop = false,
 
 
-			ColorScheme = Application.Top.ColorScheme with {
+			ColorScheme = App.Top.ColorScheme with {
 				Focus = new(Color.White, new Color(31, 31, 31))
 			}
 		};
@@ -593,7 +597,7 @@ public record Ctx {
 			new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
 	public record Git {
 		public string root => repo.GetRoot();
-		public Repository repo { get; }
+		public Repo repo { get; }
 		public Patch patch { get; private set; }
 		public Git (string path) =>
 			repo = new(path);
@@ -608,8 +612,8 @@ public record Ctx {
 	}
 }
 public static class SView {
-
-
+	public static Lazy<T> Lazy<T> (this Func<T> f) => new Lazy<T>(f);
+	public static Lazy<IEnumerable<T>> Lazy<T> (this IEnumerable<T> e) => new Lazy<IEnumerable<T>>(() => e);
 	public static IEnumerable<T> MaybeWhere<T>(this IEnumerable<T> e, Func<T, bool>? f) {
 		return f == null ? e : e.Where(f);
 	}

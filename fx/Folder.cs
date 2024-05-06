@@ -18,25 +18,26 @@ public record Folder {
 	private Dictionary<View, Tab> tabs = new();
 	public Tab currentTab => tabs[currentBody];
 	private Dictionary<Tab, View> prevView = new();
-	public Folder(View root, params(string name, View view)[] tabs) {
+	public Folder(View root, Dictionary<string, View> tabs = null) {
 		this.root = root;
 		head = new View() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
-			Height = 3,
+			Height = 1,
+			//Height = 3,
 
 			//Title = "Tabs",
-			BorderStyle = LineStyle.Single
+			//BorderStyle = LineStyle.Single
 		};
 		body = new View() {
 			X = 0,
-			Y = 1+2,
+			Y = Pos.Bottom(head),
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			//BorderStyle = LineStyle.Single
 		};
-		foreach(var (name, view) in tabs) {
+		foreach(var (name, view) in tabs ?? []) {
 			var tab = new Tab(name, view);
 			tabsList.Add(tab);
 			this.tabs[view] = tab;

@@ -372,6 +372,12 @@ public record LibraryLeaf (string path) : IFileTree, IFilePath {
 	public string name { get; set; } = Path.GetFileName(path);
 }
 public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : IListDataSource where T:class {
+
+
+	public IEnumerable<T> items { set {
+		list.Clear();
+		list.AddRange(value);
+	} }
 	public int Count => list.Count;
 	public int Length { get; }
 	public HashSet<T> marked = new();
