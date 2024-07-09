@@ -45,6 +45,8 @@ using System.Security.Cryptography.X509Certificates;
 using Octokit;
 using Repo = LibGit2Sharp.Repository;
 using App = Terminal.Gui.Application;
+using static Fx;
+using FileMode = System.IO.FileMode;
 
 //var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
 //CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
@@ -73,11 +75,12 @@ try {
 	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
 		main.ctx.Save();
 	};
-	
 	App.Top.Add(main.root);
-	if(expl)
-		main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
-	main.folder.AddTab("Github", new GithubSession(main, new RepoUrl("godotengine", "godot-builds")).root, true);
+	if(true) {
+		if(expl)
+			main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
+		//main.folder.AddTab("Github", new GithubSession(main, new RepoUrl("godotengine", "godot-builds")).root, true);
+	}
 	if(false) {
 
 		CmdInfo[] cmdList = [.. CmdStd.GetCmds()];
@@ -442,10 +445,12 @@ public class Main {
 		IEnumerable<MenuBarItem> GetBarItems () {
 			yield return new MenuBarItem("_Fx", [
 				new MenuItem("Reload", null, ctx.ResetCommands),
-				new MenuItem("Preferences", null, () => { })
+				new MenuItem("Preferences", null, () => {
+					folder.AddTab("Pref", new EditSession(this, Fx.SAVE_PATH).root, true, window);
+				})
 			]) { CanExecute = () => true };
 			yield return new MenuBarItem("_Switch", [
-				..folder.tabsList.Select(t => new MenuItem(t.name, null, () => folder.FocusTab(t)))
+				..folder.tabs.Values.Select(t => new MenuItem(t.name, null, () => folder.FocusTab(t)))
 			]) { CanExecute = () => true };
 		}
 		var windowMenuBar = new MenuBar() {
@@ -507,23 +512,20 @@ public record OAuth (string email, string clientId, string clientSecret) {
 }
 public record Fx {
 	public static string SAVE_PATH { get; } =
-		$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/state.yaml";
+		$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/fx.yaml";
 	public const string		WORK_ROOT = "%WORKROOT%";
 
 	public HashSet<string> hidden = new();
 	public HashSet<string> locked = new();
-	public ConcurrentDictionary<string, int> timesOpened = new();
+	public string[] fxIgnore = [];
+	public List<LibraryRoot> libraryData = new();
+	public List<string> pins = new();
+	public ConcurrentDictionary<string, ConcurrentDictionary<string, int>> commandCount = new();
+	public ConcurrentDictionary<string, int> accessCount = new();
 	public Dictionary<string, DateTime> lastOpened = new();
 
-	public ConcurrentDictionary<string, ConcurrentDictionary<string, int>> commandFreq = new();
-
-
-	ConcurrentDictionary<string, PathItem> pathCache = new();
-
-	public List<string> pins = new();
 	public string workroot = null; //move to ExplorerSession
 	//public List<OAuth> accounts;
-	public List<LibraryRoot> libraryData = new();
 	public Fx () { }
 	public Fx (Ctx ctx) =>	Load(ctx);
 	public void Load (Ctx ctx) {
@@ -544,6 +546,8 @@ public record Fx {
 			finally {}
 		}
 	}
+
+	public record DirIndex (string[] dir, string[] file);
 }
 public record Ctx {
 	public static string Anonymize (string path) => path.Replace(USER_PROFILE, USER_PROFILE_MASK);
@@ -551,20 +555,18 @@ public record Ctx {
 	public static string USER_PROFILE_MASK => "%userprofile%";
 	[IgnoreDataMember]
 	public static string USER_PROFILE => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-	private Deserializer de { get; } = new Deserializer();
-	private Serializer se { get; } = new Serializer();
+
+	public Cache cache = new();
+	private Deserializer de { get; } = new();
+	private Serializer se { get; } = new ();
 	public Command[] Commands { get; private set; }
 	public Sln sln;
 	public Fx fx = new();
-	public ConcurrentDictionary<string, PathItem> pathData = new();
 	public bool save = true;
-
 	public Ctx () =>
 		ResetCommands();
 	public void Load () =>
 		fx.Load(this);
-
-
 	public void Save () {
 		if(!save) {
 			return;
@@ -587,14 +589,31 @@ public record Ctx {
 			RunCmd(c.GetCmd(item.path), c.cd ? item.path : null)
 		));
 	public delegate IEnumerable<IProp> GetProps (string path);
-	public PathItem GetPathItem(string path, GetProps GetProps) => pathData[path] =
-		pathData.TryGetValue(path, out var item) ?
-			new PathItem(item.local, item.path, new(GetProps(path))) :
-			new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
-	public PathItem GetCachedPathItem (string path, GetProps GetProps) => pathData[path] =
-		pathData.TryGetValue(path, out var item) ?
+	public bool IsCurrent(string path, out PathItem item) =>
+		cache.item.TryGetValue(path, out item) && item.lastWrite >= File.GetLastWriteTime(item.path);
+	public PathItem UpdatePathCache (string path, GetProps GetProps) => cache.item[path] = new PathItem(Path.GetFileName(path), path, [.. GetProps(path)]);
+	public PathItem GetPathItem(string path, GetProps GetProps) =>
+		IsCurrent(path, out var item) ?
 			item :
-			new PathItem(Path.GetFileName(path), path, new(GetProps(path)));
+			UpdatePathCache(path, GetProps);
+	public (string[] dir, string[] file) GetSubPaths (string path) {
+		var r = 
+			IsCurrent(path, out _) && cache.dir.TryGetValue(path, out var entry) ?
+				entry :
+				cache.dir[path] = new(Directory.GetDirectories(path), Directory.GetFiles(path));
+		var (dir, file) = r;
+		return (dir, file);
+	}
+	public record Cache {
+
+
+		public static string SAVE_PATH { get; } =
+			$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/cache.yaml";
+
+		public ConcurrentDictionary<string, DirIndex> dir = new();
+		public ConcurrentDictionary<string, PathItem> item = new();
+		public ConcurrentDictionary<string, string[]> content = new();
+	}
 	public record Git {
 		public string root => repo.GetRoot();
 		public Repo repo { get; }

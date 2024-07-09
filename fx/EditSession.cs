@@ -99,7 +99,7 @@ public class EditSession {
 			},
 		};
 		quickAccess.ObjectActivated += (o, e) => {
-			if(e.ActivatedObject is IFilePath { path: { } p }) {
+			if(e.ActivatedObject is IFilePath { path: { } p } && File.Exists(p)) {
 				path = p;
 				RefreshFile();
 			}

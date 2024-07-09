@@ -402,7 +402,7 @@ public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : ILis
 	public void UpdateMarked () {
 		marked.IntersectWith(list);
 	}
-
+	public void Clear () => marked.Clear();
 	public void SetMark (int item, bool value) {
 		if(list.Count == 0) {
 			return;

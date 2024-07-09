@@ -6,57 +6,44 @@ using fx;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using System.Security.Cryptography.X509Certificates;
+using EnumerableExtensions;
 namespace fx;
-
 //TO DO: Move tabs to side
 public record Folder {
 	public View root, head, body;
-
 	public View? currentBody => body.Subviews.SingleOrDefault();
-	private List<View> bars = new();
-	public List<Tab> tabsList = new();
-	private Dictionary<View, Tab> tabs = new();
+	public Dictionary<View, Tab> tabs = [];
 	public Tab currentTab => tabs[currentBody];
-	private Dictionary<Tab, View> prevView = new();
-	public Folder(View root, Dictionary<string, View> tabs = null) {
-		this.root = root;
-		head = new View() {
+	private Dictionary<Tab, View> prevView = [];
+	public Folder(View root, params(string name, View view)[] tabs) {
+		var head = new View() {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = 1,
 			//Height = 3,
-
-			//Title = "Tabs",
 			//BorderStyle = LineStyle.Single
 		};
-		body = new View() {
+		var body = new View() {
 			X = 0,
 			Y = Pos.Bottom(head),
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			//BorderStyle = LineStyle.Single
 		};
-		foreach(var (name, view) in tabs ?? []) {
-			var tab = new Tab(name, view);
-			tabsList.Add(tab);
-			this.tabs[view] = tab;
-		}
-		Refresh();
-		/*
-		var barLeft = new Label(" ") {
-			X = 0,
-			Y = 0,
-			Width = 1,
-			Height = 1
-		};
-		head.Add(barLeft);
+		Init(root, head, body, tabs);
+	}
+	public Folder(View root, View head, View body, params (string name, View view)[] tabs) {
+		Init(root, head, body, tabs);
+	}
 
-		foreach(var (name, view) in tabs) {
-			AddTab(name, view);
-		}
-		*/
+	private void Init(View root, View head, View body, params (string name, View view)[] tabs) {
+		this.root = root;
+		this.head = head;
+		this.body = body;
 		InitTree([[root, head, body]]);
+		this.tabs = tabs.Select(pair => new Tab(pair.name, pair.view)).ToDictionary(pair => pair.view);
+		Refresh();
 	}
 	public void Refresh () {
 		head.RemoveAll();
@@ -68,102 +55,70 @@ public record Folder {
 			Height = 1
 		};
 		head.Add(barLeft);
-		foreach(var tab in tabs.Values) {
-			tab.Place(this);
-		}
+		foreach(var tab in tabs.Values)
+			tab.AddTo(this);
 		head.SetNeedsDisplay();
 	}
 	public Tab AddTab(string name, View view, bool show = false, View prevItem = null) {
 		var tab = new Tab(name, view);
-		tab.Place(this);
+		tab.AddTo(this);
 		tabs[view] = tab;
-		tabsList.Add(tab);
-
-		if(prevItem != null) {
+		if(prevItem != null)
 			prevView[tab] = prevItem;
-		}
-		if(show) {
+		if(show)
 			FocusTab(tab);
-		}
 		return tab;
 	}
 	public bool RemoveTab () {
 		var b = RemoveTab(currentBody, out var tab);
-		if(prevView.GetValueOrDefault(tab) is { } v && GetParentTab(v) is { }t) {
+		if(prevView.TryGetValue(tab, out var v) && GetParentTab(v, out var t)) {
 			FocusTab(t);
 			v.SetFocus();
 		}
 		return b;
 	}
 	public bool RemoveTab(View view, out Tab tab) {
-		if(tabs.Remove(view, out tab)) {
-			int index = tabsList.IndexOf(tab);
-			tabsList.Remove(tab);
+		var tabList = tabs.Values.ToList();
+		bool b = tabs.Remove(view, out tab);
+		if(b) {
 			prevView.Remove(tab);
-
-			if(currentBody == null) {
-
-			} else if(currentBody == view) {
-
-			} else {
-
-			}
-
-			if(currentBody is { } v) {
-				if(v == view) {
-					body.RemoveAll();
-
-					//Show next tab
-					if(tabsList.Any()) {
-						FocusTab(tabsList[Math.Clamp(index, 0, tabsList.Count - 1)]);
-					}
-				}else {
-					//FocusTab(tabs[v]);
-				}
+			if(currentBody == view) {
+				body.RemoveAll();
+				if(tabs.Any())
+					FocusTab(tabList[Math.Clamp(tabList.IndexOf(tab), 0, tabs.Values.Count - 1)]);
 			}
 			Refresh();
-			return true;
 		}
-		return false;
+		return b;
 	}
-	public Tab GetParentTab(View v) {
-		while(v != null) {
-			if(tabs.TryGetValue(v, out var tab)) {
-				return tab;
-			}
+	public bool GetParentTab(View v, out Tab tab) {
+		tab = null;
+		while(v != null && !tabs.TryGetValue(v, out tab))
 			v = v.SuperView;
-		}
-		return null;
+		return tab != null;
 	}
 	public void FocusTab(Tab tab, bool focus = true) {
 		SelectTab(tab);
 		body.Title = tab.name;
 		SetBody(tab.view);
-		if(focus) {
+		if(focus)
 			tab.view.SetFocus();
-		}
 	}
 	private void SelectTab(Tab tab) {
-		foreach(var t in tabs.Values) {
+		foreach(var t in tabs.Values)
 			t.Refresh();
-		}
 		tab.Refresh(true);
 	}
 	public void SwitchTab (int inc = 1) {
-		var c = tabsList.Count;
-		if(c == 0) {
+		var c = tabs.Count;
+		if(c < 2)
 			return;
-		}
-		if(currentBody is { } v) {
-			var tab = tabs[v];
-			if(c == 1) {
-				return;
-			}
-			var next = tabsList[(tabsList.IndexOf(tab) + inc + c) % c];
-			FocusTab(next, true);
-		} else {
-			FocusTab(tabsList[0], true);
-		}
+		FocusTab(
+			currentBody is { }v ?
+				tabs.Values.ElementAt((tabs.Keys.IndexOf(v) + inc + c) % c) :
+				tabs.Values.First(),
+			true
+			);
 	}
 	public void SetBody (View view) {
 		body.RemoveAll();
@@ -173,16 +128,14 @@ public record Folder {
 public record Tab {
 	public string name;
 	public View view;
-
 	public object Session;
-
 	public View tab;
 	public View leftBar, rightBar;
 	public Tab (string name, View view) {
 		this.name = name;
 		this.view = view;
 	}
-	public void Place (Folder folder) {
+	public void AddTo (Folder folder) {
 		//context menu
 		//- Kill all to left
 		//- Kill all to right
@@ -216,7 +169,6 @@ public record Tab {
 			}
 			return root;
 		}).Value;
-
 		rightBar = new View() {
 			Title = "%%",
 			X = Pos.Right(tab) + 0,
@@ -229,7 +181,6 @@ public record Tab {
 	}
 	public void Refresh (bool open = false) {
 		if(open) {
-
 			leftBar.Text = leftBar.Frame.Width == 1 ? "[" : " [";
 			rightBar.Text = "] ";
 		} else {

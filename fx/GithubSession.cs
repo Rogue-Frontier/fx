@@ -7,12 +7,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Terminal.Gui;
-
+using Label = Terminal.Gui.Label;
 namespace fx;
-
-public record RepoUrl(string owner, string repo) {
-
-}
+public record RepoUrl(string owner, string repo) {}
 public class GithubSession {
 	public View root;
 	public GitHubClient client;
@@ -24,16 +21,9 @@ public class GithubSession {
 		byte[] GetFile (string path) => files.GetOrAdd(path, p => client.Repository.Content.GetRawContent(url.owner, url.repo, path).Result);
 		ConcurrentDictionary<string, IEnumerable<RepositoryContent>> dirs = new();
 		IEnumerable<RepositoryContent> GetDir (string path = "") => dirs.GetOrAdd(path, p => (p switch {
-			"" => client.Repository.Content.GetAllContents(id),
-			_ => client.Repository.Content.GetAllContents(id, p)
+			{ Length:>0} => client.Repository.Content.GetAllContents(id, p),
+			_ => client.Repository.Content.GetAllContents(id),
 		}).Result);
-
-		root = new View() {
-			X = 0,
-			Y = 0,
-			Width = Dim.Fill(),
-			Height = Dim.Fill(),
-		};
 		var ListView = (string s, IListDataSource src) => new ListView() {
 			Title = s,
 			BorderStyle = LineStyle.Single,
@@ -42,7 +32,12 @@ public class GithubSession {
 			Width = Dim.Fill(),
 			Height = Dim.Fill(),
 			Source = src,
-			
+		};
+		root = new View() {
+			X = 0,
+			Y = 0,
+			Width = Dim.Fill(),
+			Height = Dim.Fill(),
 		};
 		var code = new Lazy<ListView>(() => {
 			var GetFiles = () => client.Repository.Content.GetAllContents(id).Result;
@@ -97,8 +92,6 @@ public class GithubSession {
 			};
 			return v;
 		}).Value;
-
-
 		var issue = new Lazy<ListView>(() => {
 			var GetIssues = () => client.Issue.GetAllForRepository(id).Result;
 			var list = new ListMarker<Issue>([], (c, i) => c.Title);
@@ -133,29 +126,38 @@ public class GithubSession {
 			issue,
 			pull
 		];
-		var nav = new ListView() {
-			Title = "Repository",
-			BorderStyle = LineStyle.Single,
-			X = 0,
+		var folder = new Folder(root,
+			new View() {
+				X = 0,
+				Y = 0,
+				Width = Dim.Fill(),
+				Height = 1
+			},
+			new View() {
+				X = 0,
+				Y = 1,
+				Width = Dim.Fill(),
+				Height = Dim.Fill(),
+			},
+			[..panels.Select(p => (p.Title, p))]);
+		var owner = new Label() {
+			Text = url.owner,
+			X = 48,
 			Y = 0,
-			Width = 24,
-			Height = Dim.Fill(),
-			Source = new ListMarker<View>([
-				//"Code", "Commit", "Branch", "Release", "Issue", "Pull",
-				..panels
-				], (s, i) => s.Title)
 		};
-		nav.SelectedItemChanged += (s, e) => {
-			View[] v = [.. root.Subviews.Take(root.Subviews.IndexOf(nav) + 1)];
-			root.RemoveAll();
-			root.Add(v);
-			if(e.Item is { }i and not -1) {
-				root.Add(panels[i]);
-			}
-			root.SetNeedsDisplay();
+		var slash = new Label() {
+			Text = "/",
+			X = Pos.Right(owner) + 1,
+			Y = 0
+		};
+		var repo = new Label() {
+			Text = $"{url.repo}",
+			X = Pos.Right(slash) + 1,
+			Y = 0
 		};
 		SView.InitTree(
-			[[root, nav /*pinList, recentList, repoList*/]]
+			[[root, owner, slash, repo /*pinList, recentList, repoList*/]]
 			);
+		root.SetNeedsDisplay();
 	}
 }

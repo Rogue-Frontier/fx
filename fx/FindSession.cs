@@ -332,7 +332,7 @@ public class FindSession {
 		}),
 		
 		.. item is not FindLine ?
-			ExploreSession.GetStaticActions(main, ctx.GetCachedPathItem(item.path, ExploreSession.GetStaticProps)) :
+			ExploreSession.GetStaticActions(main, ctx.GetPathItem(item.path, ExploreSession.GetStaticProps)) :
 			[]
 	];
 	IEnumerable<MenuItem> GetActions (FindDir d) {

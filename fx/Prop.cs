@@ -37,7 +37,7 @@ public static class Props {
 		IS_LINK_TO = new PropGen<string>("link",					dest => $"Link To: {dest}"),
 		IN_LIBRARY = new PropGen<LibraryRoot>("libraryItem",			library => $"In Library: {library.name}"),
 		IN_SOLUTION = new PropGen<string>("solutionItem",			slnPath => $"In Solution: {slnPath}"),
-		IN_ZIP = new PropGen<string>("zipItem",						zipRoot =>	$"In Zip: {zipRoot}");
+		IN_ZIP = new PropGen<ZipItem>("zipItem",						zi =>	$"In Zip: {zi.zipRoot} [{zi.zipEntry}]");
 	public static string GetRoot (this Repository repo) => Path.GetFullPath($"{repo.Info.Path}/..");
 	public static string GetRepoLocal (this Repository repo, string path) => path.Replace(repo.GetRoot() + Path.DirectorySeparatorChar, null);
 	public static string GetRepoLocal (string root, string path) => path.Replace(root + Path.DirectorySeparatorChar, null);
@@ -58,6 +58,10 @@ public static class Props {
 	}
 	/// <summary>Identifies a repository-contained file by local path and repository root</summary>
 	public record RepoItem (string root, string local) { }
+	public record ZipItem(string zipRoot, string zipEntry) {
+		public static ZipItem From(string zipRoot, string path) =>
+			new ZipItem(zipRoot, path.Replace(Path.GetFullPath($"{zipRoot}/"), ""));
+	}
 }
 public record Prop (string id, string desc) : IProp { }
 public record Prop<T> (string id, string desc, T data) : IProp { }
