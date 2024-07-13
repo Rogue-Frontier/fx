@@ -1,9 +1,21 @@
 ---
-np: C:/Program Files/Notepad++/notepad++.exe
-cx: ../../../../cx/bin/Debug/net9.0/cx.exe
-vi: C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe
-ffmpeg: ffmpeg
-ase: C:\Program Files (x86)\Steam\steamapps\common\Aseprite\aseprite.exe
-ldraw: C:\Program Files\LibreOffice\program\sdraw.exe
-ldoc: C:\Program Files\LibreOffice\program\swriter.exe
-godot: C:\Users\alexm\Desktop\Godot_v4.2.1-stable_mono_win64\Godot_v4.2.1-stable_mono_win64_console.exe
+np: >
+  "C:/Program Files/Notepad++/notepad++.exe"
+cx: >
+  "../../../../cx/bin/Debug/net9.0/cx.exe"
+vi: >
+  "C:/Program Files/Microsoft Visual Studio/2022/Community/Common7/IDE/devenv.exe"
+ffmpeg: >
+  "ffmpeg"
+e: >
+  "explorer.exe" %1%
+aseprite: >
+  "C:/Program Files (x86)/Steam/steamapps/common/Aseprite/aseprite.exe" %1%
+asecii: >
+  "C:/Users/alexm/source/repos/ASECII/ASECII/bin/Debug/net9.0/ASECII.exe" %1%
+ldraw: >
+  "C:/Program Files/LibreOffice/program/sdraw.exe"
+ldoc: >
+  "C:/Program Files/LibreOffice/program/swriter.exe"
+godot: >
+  "%USERPROFILE%/Desktop/Godot_v4.2.1-stable_mono_win64/Godot_v4.2.1-stable_mono_win64_console.exe"

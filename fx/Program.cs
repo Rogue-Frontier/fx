@@ -55,8 +55,16 @@ bool expl = true;
 if(args is [string cwd]) {
 	Environment.CurrentDirectory = cwd;
 	expl = true;
-
 }
+
+Environment.SetEnvironmentVariable("PATH",$"{Environment.GetEnvironmentVariable("PATH")
+	}{Path.PathSeparator
+	}{Command.EXECUTABLES_PATH
+	}");
+
+var path = Environment.GetEnvironmentVariable("PATH");
+
+int i = 0;
 #if false
 foreach(var a in args) {
 	Console.WriteLine(a);
@@ -559,7 +567,7 @@ public record Ctx {
 	public Cache cache = new();
 	private Deserializer de { get; } = new();
 	private Serializer se { get; } = new ();
-	public Command[] Commands { get; private set; }
+	public Command[] Commands { get; private set; } = [];
 	public Sln sln;
 	public Fx fx = new();
 	public bool save = true;
@@ -575,13 +583,13 @@ public record Ctx {
 		File.WriteAllText(Fx.SAVE_PATH, se.Serialize(fx).Replace(USER_PROFILE, USER_PROFILE_MASK));
 	}
 	public void ResetCommands () {
-		var dir = Command.EXECUTABLES_DIR;
-		Directory.CreateDirectory(dir);
-		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"D:/fx/fx/{dir}.yaml"));
+		var loc = Command.EXECUTABLES_PATH;
+		Directory.CreateDirectory(loc);
+		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{loc}.yaml"));
 		foreach((var name, var path) in executables) {
-			File.WriteAllText($"{dir}/{name}", path);
+			File.WriteAllText($"{loc}/{name}.bat", path);
 		}
-		Commands = de.Deserialize<Command[]>(File.ReadAllText("D:/fx/fx/commands.yaml"));
+		Commands = de.Deserialize<Command[]>(File.ReadAllText($"{Command.ASSEMBLY}/commands.yaml"));
 	}
 	public IEnumerable<MenuItem> GetCommands (PathItem item) => Commands
 		.Where(c => c.Accept(item.path))
@@ -590,7 +598,9 @@ public record Ctx {
 		));
 	public delegate IEnumerable<IProp> GetProps (string path);
 	public bool IsCurrent(string path, out PathItem item) =>
-		cache.item.TryGetValue(path, out item) && item.lastWrite >= File.GetLastWriteTime(item.path);
+		cache.item.TryGetValue(path, out item)
+		&& item.lastWrite >= File.GetLastWriteTime(item.path)
+		&& !item.forceReload;
 	public PathItem UpdatePathCache (string path, GetProps GetProps) => cache.item[path] = new PathItem(Path.GetFileName(path), path, [.. GetProps(path)]);
 	public PathItem GetPathItem(string path, GetProps GetProps) =>
 		IsCurrent(path, out var item) ?

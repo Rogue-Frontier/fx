@@ -4,6 +4,12 @@
   targetAny:
     file:
       - ext: pdf
+- name: scons
+  fmt: scons {0}
+  targetAny:
+    dir:
+      - file:
+          - name: SConstruct
 - name: Edit in LibreOffice Writer
   fmt: ldoc {0}
   targetAny:
@@ -18,7 +24,7 @@
 #        - name: .git
 #        - name: .github
 #  #tag: GitHub Repository
-- name: Run C#
+- name: dotnet run
   fmt: dotnet run
   cd: true
   targetAny:
@@ -27,7 +33,7 @@
           - ext: csproj
     file:
       - ext: csproj
-- name: Run C# Project
+- name: dotnet run --project
   fmt: echo {0} & dotnet run --project {0}
   cd: true
   targetAny:
@@ -37,7 +43,7 @@
     file:
       - ext: csproj
   #tag: C# Project
-- name: Publish C# Project
+- name: dotnet publish
   fmt: dotnet publish --project {0}
   cd: true
   targetAny:

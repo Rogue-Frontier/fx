@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -17,9 +18,10 @@ public record Command () {
 
 	public bool cd = false;
 
-	public static string EXECUTABLES_DIR = "executables";
+	public static string ASSEMBLY = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+	public static string EXECUTABLES_PATH = Path.GetFullPath($"{ASSEMBLY}/executables");
 	public string fmt { set => exe = @$"""{value}"""; }
-	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_DIR}/{value}")}"" {{0}}"; }
+	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_PATH}/{value}")}"" {{0}}"; }
 	public bool Accept (string path) => targetAny.Accept(path);
 	public string GetCmd (string target) => $"{string.Format(exe, target)}";
 }

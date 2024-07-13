@@ -372,8 +372,6 @@ public record LibraryLeaf (string path) : IFileTree, IFilePath {
 	public string name { get; set; } = Path.GetFileName(path);
 }
 public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : IListDataSource where T:class {
-
-
 	public IEnumerable<T> items { set {
 		list.Clear();
 		list.AddRange(value);
@@ -385,18 +383,17 @@ public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : ILis
 	public void Render (ListView container, ConsoleDriver driver, bool selected, int item, int col, int line, int width, int start = 0) {
 		container.Move(col, line);
 		T? t = list?[item];
-		if(t is null) {
-			RenderUstr(driver, "", col, line, width);
-		} else {
-			RenderUstr(driver, GetString(t, item), col, line, width, start);
+
+		string str = "";
+		if(t is {}) {
+			str = GetString(t, item);
 		}
-		void RenderUstr (ConsoleDriver driver, string ustr, int col, int line, int width, int start = 0) {
-			string u = TextFormatter.ClipAndJustify(ustr, width, TextAlignment.Left);
-			driver.AddStr(u);
-			width -= u.GetColumns();
-			while(width-- > 0) {
-				driver.AddRune((Rune)' ');
-			}
+
+		string u = TextFormatter.ClipAndJustify(str, width, TextAlignment.Left);
+		driver.AddStr(u);
+		width -= u.GetColumns();
+		while(width-- > 0) {
+			driver.AddRune((Rune)' ');
 		}
 	}
 	public void UpdateMarked () {
