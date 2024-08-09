@@ -5,10 +5,6 @@ VisualStudioVersion = 17.9.34622.214
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "fx", "fx\fx.csproj", "{44895ADB-D814-42C8-9101-2988860B259F}"
 EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "cx", "cx\cx.csproj", "{64C65EDF-A150-4132-B64C-D5C750C548FA}"
-EndProject
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "mx", "mx\mx.csproj", "{F86F75A7-1777-4880-B123-37F88C46FE89}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -19,14 +15,6 @@ Global
 		{44895ADB-D814-42C8-9101-2988860B259F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{44895ADB-D814-42C8-9101-2988860B259F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{44895ADB-D814-42C8-9101-2988860B259F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{64C65EDF-A150-4132-B64C-D5C750C548FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{64C65EDF-A150-4132-B64C-D5C750C548FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{64C65EDF-A150-4132-B64C-D5C750C548FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{64C65EDF-A150-4132-B64C-D5C750C548FA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{F86F75A7-1777-4880-B123-37F88C46FE89}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{F86F75A7-1777-4880-B123-37F88C46FE89}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{F86F75A7-1777-4880-B123-37F88C46FE89}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{F86F75A7-1777-4880-B123-37F88C46FE89}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

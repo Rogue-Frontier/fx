@@ -21,7 +21,7 @@ public record Command () {
 	public static string ASSEMBLY = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
 	public static string EXECUTABLES_PATH = Path.GetFullPath($"{ASSEMBLY}/executables");
 	public string fmt { set => exe = @$"""{value}"""; }
-	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_PATH}/{value}")}"" {{0}}"; }
+	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_PATH}/{value}.bat")}"" {{0}}"; }
 	public bool Accept (string path) => targetAny.Accept(path);
 	public string GetCmd (string target) => $"{string.Format(exe, target)}";
 }
