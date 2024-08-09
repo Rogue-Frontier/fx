@@ -1,11 +1,8 @@
 ﻿using Terminal.Gui;
 using View = Terminal.Gui.View;
 using static SView;
-using fx;
 
 using static Terminal.Gui.MouseFlags;
-using static Terminal.Gui.KeyCode;
-using System.Security.Cryptography.X509Certificates;
 using System.Diagnostics.CodeAnalysis;
 namespace fx;
 //TO DO: Move tabs to side

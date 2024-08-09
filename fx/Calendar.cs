@@ -1,9 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Terminal.Gui;
+﻿using Terminal.Gui;
 
 
 
@@ -14,10 +9,7 @@ using Google.Apis.Calendar.v3;
 using Google.Apis.Calendar.v3.Data;
 using Google.Apis.Services;
 using Google.Apis.Util;
-using static Unix.Terminal.Curses;
 using Event = Google.Apis.Calendar.v3.Data.Event;
-using Terminal.Gui.TextValidateProviders;
-using ClangSharp.Interop;
 
 namespace fx {
 	public class Calendar {

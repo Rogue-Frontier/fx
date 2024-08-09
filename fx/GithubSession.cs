@@ -1,11 +1,5 @@
 ﻿using Octokit;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics.Metrics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using Terminal.Gui;
 using Label = Terminal.Gui.Label;
 namespace fx;

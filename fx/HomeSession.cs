@@ -1,18 +1,9 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net.NetworkInformation;
-using System.Security.Cryptography.X509Certificates;
+﻿using System.Collections;
 using System.Text;
-using System.Threading.Tasks;
 using Terminal.Gui;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using GDShrapt.Reader;
-using System.Runtime.Serialization;
-using YamlDotNet.Core.Tokens;
 namespace fx;
 public class HomeSession {
 	public View root;

@@ -1,17 +1,9 @@
-using LibGit2Sharp;
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 using Terminal.Gui;
 
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
-using GDShrapt.Reader;
 namespace fx;
 public class FindSession {
 	public View root;

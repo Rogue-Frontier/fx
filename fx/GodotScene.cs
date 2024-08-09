@@ -1,12 +1,4 @@
-﻿using ClangSharp;
-using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-namespace fx;
+﻿namespace fx;
 
 public interface IResource {
 	public Dictionary<string, string> pairs { get; set; }

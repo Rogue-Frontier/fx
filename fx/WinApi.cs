@@ -1,8 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Text;
 
 namespace fx;
 
@@ -11,7 +7,6 @@ using System.Diagnostics;
 
 //https://stackoverflow.com/a/43640787
 using System.Runtime.InteropServices;
-using static Terminal.Gui.SpinnerStyle;
 using HWND = nint;
 
 // ref: http://www.microsoft.com/whdc/system/Sysinternals/MoreThan64proc.mspx

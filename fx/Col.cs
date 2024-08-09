@@ -1,13 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Numerics;
-using System.Text;
-using System.Threading.Tasks;
+﻿using System.Numerics;
 using Terminal.Gui;
 
 namespace fx {
-    public record Ext<T>(T min, T max) where T:IComparisonOperators<T, T, bool> {
+	public record Ext<T>(T min, T max) where T:IComparisonOperators<T, T, bool> {
         public Ext (T c) : this(c, c) { }
         public T Clamp (T x) =>
             x < min ? min :

@@ -1,9 +1,5 @@
-﻿using GDShrapt.Reader;
-using Namotion.Reflection;
-using System.Linq;
+﻿using Namotion.Reflection;
 using System.Reflection;
-using System.Runtime.CompilerServices;
-using Terminal.Gui;
 
 using Str = string;
 using Bit = bool;
