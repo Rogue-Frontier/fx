@@ -41,7 +41,7 @@ public class GithubSession {
 		};
 		var code = new Lazy<ListView>(() => {
 			var GetFiles = () => client.Repository.Content.GetAllContents(id).Result;
-			var list = new ListMarker<RepositoryContent>([], (c, i) =>
+			var list = new ListMarker<RepositoryContent>((c, i) =>
 				$"{c.Name} ");
 			var v = ListView("Code", list);
 			var l = GetFiles.Lazy();
@@ -69,7 +69,7 @@ public class GithubSession {
 		}).Value;
 		var branch = new Lazy<ListView>(() => {
 			var GetBranches = () => client.Repository.Branch.GetAll(id).Result;
-			var list = new ListMarker<Branch>([],(c, i) => c.Name);
+			var list = new ListMarker<Branch>((c, i) => c.Name);
 			var v = ListView("Branch", list);
 			var l = GetBranches.Lazy();
 			v.Added += (a, e) => {
@@ -82,7 +82,7 @@ public class GithubSession {
 		var release = new Lazy<ListView>(() => {
 			var GetReleases = () =>
 				client.Repository.Release.GetAll(id).Result;
-			var list = new ListMarker<Release>([], (c, i) => c.Name);
+			var list = new ListMarker<Release>((c, i) => c.Name);
 			var v = ListView("Release", list);
 			var l = GetReleases.Lazy();
 			v.Added += (a, e) => {
@@ -94,7 +94,7 @@ public class GithubSession {
 		}).Value;
 		var issue = new Lazy<ListView>(() => {
 			var GetIssues = () => client.Issue.GetAllForRepository(id).Result;
-			var list = new ListMarker<Issue>([], (c, i) => c.Title);
+			var list = new ListMarker<Issue>((c, i) => c.Title);
 			var v = ListView("Issue", list);
 
 			var l = GetIssues.Lazy();
@@ -108,7 +108,7 @@ public class GithubSession {
 		var pull = new Lazy<ListView>(() => {
 			var GetPulls = () =>
 			client.Repository.PullRequest.GetAllForRepository(id).Result;
-			var list = new ListMarker<PullRequest>([], (c, i) => c.Title);
+			var list = new ListMarker<PullRequest>((c, i) => c.Title);
 			var v = ListView("Pull", list);
 			var l = GetPulls.Lazy();
 			v.Added += (a, e) => {

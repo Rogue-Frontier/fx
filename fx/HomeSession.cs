@@ -294,7 +294,7 @@ public record QuickAccessTree : ITreeBuilder<IFileTree> {
 		List<LibraryRoot> libraryData = main.ctx.fx.libraryData;
 		List<string> pinData = main.ctx.fx.pins;
 		return [
-			new TreeRoot("Libraries", [.. libraryData]),
+			new TreeRoot("Libraries", libraryData),
 			new TreeRoot("Pins", [.. pinData.Select(path => new PinItem(path))]),
 			new TreeRoot("Drives", [
 				..DriveInfo.GetDrives().Select(d => new LibraryItem(d.Name, true))
@@ -347,7 +347,7 @@ public interface  IFilePath {
     string path { get; }
 	public bool exists => Path.Exists(path);
 }
-public record TreeRoot (string name, IFileTree[] items) : IFileTree { }
+public record TreeRoot (string name, IEnumerable<IFileTree> items) : IFileTree { }
 public record PinItem(string path) : IFileTree, IFilePath {
 	public string name { get; set; } = IFileTree.GetPathName(path);
 }
@@ -371,7 +371,13 @@ public record LibraryItem (string path, bool visible) : IFileTree, IFilePath {
 public record LibraryLeaf (string path) : IFileTree, IFilePath {
 	public string name { get; set; } = Path.GetFileName(path);
 }
-public record ListMarker<T>(List<T> list, Func<T, int, string> GetString) : IListDataSource where T:class {
+public record ListMarker<T> (Func<T, int, string> GetString) : IListDataSource where T : class {
+	public List<T> list = [];
+
+	public ListMarker(List<T> l, Func<T, int, string> GetString) : this(GetString) {
+		this.list = l;
+	}
+
 	public IEnumerable<T> items { set {
 		list.Clear();
 		list.AddRange(value);

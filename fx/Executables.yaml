@@ -12,7 +12,7 @@ e: >
 aseprite: >
   "C:/Program Files (x86)/Steam/steamapps/common/Aseprite/aseprite.exe" %1%
 asecii: >
-  "C:/Users/alexm/source/repos/ASECII/ASECII/bin/Debug/net9.0/ASECII.exe" %1%
+  "%USERPROFILE%/source/repos/ASECII/ASECII/bin/Debug/net9.0/ASECII.exe" %1%
 ldraw: >
   "C:/Program Files/LibreOffice/program/sdraw.exe"
 ldoc: >

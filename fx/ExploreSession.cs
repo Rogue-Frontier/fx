@@ -1,64 +1,44 @@
-using IWshRuntimeLibrary;
-using LibGit2Sharp;
-using System;
-using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.IO.Compression;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Terminal.Gui;
-using fx;
-using File = System.IO.File;
-using System.Collections;
-using System.Reflection;
-using static Ctx;
-using System.Threading;
-using Microsoft.Build.Construction;
-using System.Reflection.Metadata.Ecma335;
-using static fx.Props;
-using System.Collections.Concurrent;
-using static System.Net.Mime.MediaTypeNames;
-using Application = Terminal.Gui.Application;
-using System.Runtime.InteropServices;
 using System.Xml.Linq;
-using System.IO;
-
+using EnumerableExtensions;
+using LibGit2Sharp;
+using Terminal.Gui;
+using IWshRuntimeLibrary;
+using File = System.IO.File;
+using Application = Terminal.Gui.Application;
 using Label = Terminal.Gui.Label;
-
+using Repository = LibGit2Sharp.Repository;
+using static Ctx;
+using static fx.Props;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
-using System.Text.RegularExpressions;
-using EnumerableExtensions;
-using Octokit;
-using Repository = LibGit2Sharp.Repository;
 namespace fx;
 public class ExploreSession {
 	public View root;
-	private Ctx ctx => main.ctx;
-	private Fx fx => ctx.fx;
-
 	public record SortMode(Func<PathItem, IComparable> f, bool reverse);
-	public Dictionary<string, int> lastIndex = new();
+	public Dictionary<string, int> lastIndex = [];
 	public string cwd = Environment.CurrentDirectory;
-	public LinkedList<string> cwdPrev = new();
-	public LinkedList<string> cwdNext = new();
+	public LinkedList<string> cwdPrev = [];
+	public LinkedList<string> cwdNext = [];
 	private ListMarker<PathItem> cwdData;
 	public SortMode pathSort;
-	Dictionary<string, GitItem> gitMap = new();
+	Dictionary<string, GitItem> gitMap = [];
 	private Label goPrev, goNext, goLeft, goTo;
 	private TextField addressBar;
 	public ListView pathList;
 	//When we cd out of a repository, we immediately forget about it.
 	private RepoPtr? git;
-	private string cwdRecall = null;
-	Regex nameFilter = null;
+	private string? cwdRecall;
+	Regex? nameFilter;
 	Action<string> cwdChanged;
-	public string zipRoot;
+	public string? zipRoot;
 	private Main main;
-
 	private LibraryRoot libraryRoot;
 
+	private Ctx ctx => main.ctx;
+	private Fx fx => ctx.fx;
 	public ExploreSession (Main main, string initCwd) {
 		this.main = main;
 		this.cwd = initCwd;
@@ -89,15 +69,15 @@ public class ExploreSession {
 
 		pathSort = new SortMode(sortModes[0], false);
 		main.TermEnter += OnTermEnter;
-		root = new View() {
+		root = new View {
 			Title = "Root",
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = Dim.Fill()
 		};
-		var tree = new QuickAccessTree();
-		var quickAccess = new TreeView<IFileTree>() {
+		var tree = new QuickAccessTree { };
+		var quickAccess = new TreeView<IFileTree> {
 			Title = "Quick Access",
 			BorderStyle = LineStyle.Single,
 			X = 0,
@@ -111,7 +91,7 @@ public class ExploreSession {
 		quickAccess.AddObjects(tree.GetRoots(main));
 		foreach(var t in quickAccess.Objects)
 			quickAccess.Expand(t);
-		var pathPane = new View() {
+		var pathPane = new View {
 			//Title = "Directory",
 			BorderStyle = LineStyle.Single,
 
@@ -121,7 +101,7 @@ public class ExploreSession {
 			Height = Dim.Fill(), //30,
 		};
 		cwdChanged += s => pathPane.Title = s;
-		var filter = new TextField() {
+		var filter = new TextField {
 			AutoSize = false,
 			X = 0,
 			Y = 0,
@@ -133,63 +113,74 @@ public class ExploreSession {
 			TabStop = false
 		};
 
-		CancellationTokenSource filterCancel = null;
+
+
+		int refresh = 0;
+		void Iteration (object? a, object e)=>
+			refresh++;
+		Application.Iteration += Iteration;
+		CancellationTokenSource? filterCancel = null;
 		filter.TextChanged += (a, e) => {
-			try {
-
-				if(e.NewValue is { Length:0} or null) {
-					nameFilter = null;
-				} else {
-					nameFilter = new Regex(e.NewValue);
+			Regex? MakeRegex(string s) {
+				try {
+					return new Regex(s);
+				} catch {
+					return null;
 				}
-				filterCancel?.Cancel();
-				filterCancel = new();
-				Task.Run(() => {
-					RefreshDirListing(cwd);
-					pathList.SetNeedsDisplay();
-				}, filterCancel.Token);
-			} catch {
-
 			}
+			if(e.NewValue is { Length: > 0 } s) {
+				nameFilter = MakeRegex(s) ?? null;
+			} else {
+				nameFilter = null;
+			}
+			filterCancel?.Cancel();
+			filterCancel = new();
+			refresh = 0;
+			Task.Run(() => {
+				RefreshDirListing(cwd);
+				//Auto-refresh does not work if processing takes more than one iteration
+				if(refresh > 1) {
+					Application.Refresh();
+				}
+			}, filterCancel.Token);
 		};
 		filter.KeyDownD(new() {
-			[(int)KeyCode.Enter] = e => {
+			[(int)Enter] = e => {
 				pathList.SetFocus();
 				if(pathList.SelectedItem == -1 && cwdData.Count > 0) {
 					pathList.SelectedItem = 0;
 				}
 			}
 		});
+		goPrev = new(){ Title = "[<---]", X = Pos.AnchorEnd(24), TabStop = false };
+		goNext = new() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
+		goLeft = new() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
+		goTo   = new () { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
 
-		goPrev = new Label() { Title = "[<---]", X = Pos.AnchorEnd(24), TabStop = false };
-		goNext = new Label() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
-		goLeft = new Label() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
-		goTo   = new Label() { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
+		cwdData = new((p, i) => p.entry);
 
-		cwdData = new(new(), (p, i) => p.entry);
-
-		var sortName = new Label() {
+		var sortName = new Label {
 			Text = "name",
 			AutoSize = false,
 			X = 7,
 			Y = 1,
 			Width = 32
 		};
-		var sortType = new Label() {
+		var sortType = new Label {
 			Text = "ext",
 			AutoSize = false,
 			X = Pos.Right(sortName),
 			Y = 1,
 			Width = 6
 		};
-		var sortSize = new Label() {
+		var sortSize = new Label {
 			Text = "logSize",
 			AutoSize = false,
 			X = Pos.Right(sortType),
 			Y = 1,
 			Width = 8
 		};
-		var sortAccessDate = new Label() {
+		var sortAccessDate = new Label {
 			Text = "lastAccess",
 			AutoSize = false,
 			X = Pos.Right(sortSize),
@@ -197,15 +188,14 @@ public class ExploreSession {
 			Width = 12
 		};
 
-		var sortAccessFreq = new Label() {
+		var sortAccessFreq = new Label {
 			Text = "views",
 			AutoSize = false,
 			X = Pos.Right(sortAccessDate),
 			Y = 1,
 			Width = 6
 		};
-
-		var sortGit = new Label() {
+		var sortGit = new Label {
 			Text = "repo",
 			AutoSize = false,
 			X = Pos.Right(sortAccessFreq),
@@ -220,7 +210,7 @@ public class ExploreSession {
 			sortAccessFreq,
 			sortGit
 		], [null]).ToArray();
-		pathList = new ListView() {
+		pathList = new ListView {
 			//Title = "Directory Items",
 			X = 0,
 			Y = Pos.Bottom(sortName),
@@ -236,7 +226,7 @@ public class ExploreSession {
 		InitEvents();
 		InitCwd();
 		RefreshPads();
-		void InitTreeLocal () {
+		void InitTreeLocal() {
 			SView.InitTree(
 				[pathPane, filter, goPrev, goNext, goLeft, goTo, sortName, sortSize, sortType, sortAccessDate, sortAccessFreq, sortGit, pathList],
 				[root, addressBar, quickAccess, pathPane]
@@ -339,14 +329,14 @@ public class ExploreSession {
 				}
 			});
 			goPrev.MouseEvD(new() {
-				[(int)Button3Clicked] = e => new ContextMenu() {
+				[(int)Button3Clicked] = e => new ContextMenu {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new([.. cwdPrev.Select((string p, int i) => new MenuItem(p, "", () => GoPrev(i + 1)))])
 				}.Show(),
 				[(int)Button1Pressed] = e => e.Handled = (GoPrev())
 			});
 			goNext.MouseEvD(new() {
-				[(int)Button3Clicked] = e => new ContextMenu() {
+				[(int)Button3Clicked] = e => new ContextMenu {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new(
 						[.. cwdNext.Select((string p, int i) => new MenuItem(p, "", () => GoNext(i + 1)))]),
@@ -354,7 +344,7 @@ public class ExploreSession {
 				[(int)Button1Pressed] = e => e.Handled = (GoNext())
 			});
 			goLeft.MouseEvD(new() {
-				[(int)Button3Clicked] = e => new ContextMenu() {
+				[(int)Button3Clicked] = e => new ContextMenu {
 					Position = e.MouseEvent.ScreenPosition,
 					MenuItems = new([.. Up().Select(p => new MenuItem(p, "", () => TryGoPath(p)))])
 				}.Show(),
@@ -440,8 +430,6 @@ public class ExploreSession {
 			pathList.OpenSelectedItem += (a, e) => GoItem();
 			pathList.KeyDownF(e => {
 				if(!pathList.HasFocus) return null;
-
-
 				return ((int)e.KeyCode) switch {
 					(int)Enter or (int)CursorRight => () => GoItem(),
 					(int)CursorLeft => () => TryGoPath(Path.GetDirectoryName(cwd)),
@@ -451,6 +439,9 @@ public class ExploreSession {
 					},
 					'F' | (int)CtrlMask => () => {
 						filter.SetFocus();
+					},
+					'R' | (int)CtrlMask => () => {
+						RefreshCwd();
 					},
 					'G' | (int)CtrlMask => () => {
 						//Grep
@@ -636,7 +627,7 @@ public class ExploreSession {
 						new MenuBarItem("Selected", [..GetGroupActions(main, marked)])
 					]);
 				}
-				var c = new ContextMenu() {
+				var c = new ContextMenu {
 					Position = new(x + col, y+row),
 					MenuItems = bar
 				};
@@ -694,7 +685,7 @@ public class ExploreSession {
 		if(main.folder.currentBody != root) {
 			return;
 		}
-		var cmd = e.text;
+		
 		//Replace {0} with the first marked path
 		string[] selected = cwdData.list.Where((item, index) => pathList.Source.IsMarked(index)).Select(item => item.local).ToArray();
 
@@ -702,40 +693,35 @@ public class ExploreSession {
 			selected.Any() ?
 				selected :
 				[..from item in cwdData.list select item.local];
-		cmd = string.Format(cmd, args);
-		cmd = cmd.Replace("%select%", string.Join(" ", from s in selected select $@"""{s}"""));
-		cmd = cmd.Replace("%here%", $@"""{cwdData.list[pathList.SelectedItem].local}""");
-		cmd = cmd.Replace("%all%", string.Join(" ", [.. from item in cwdData.list select $@"""{item.local}"""]));
-
+		var cmd = e.text;
+		cmd =	string.Format(cmd, args)
+				.Replace("%select%", string.Join(" ", from s in selected select $@"""{s}"""))
+				.Replace("%this%", $@"""{cwdData.list[pathList.SelectedItem].local}""")
+				.Replace("%all%", string.Join(" ", [.. from item in cwdData.list select $@"""{item.local}"""]));
 		if(cmd.MatchArray("cd (?<dest>.+)", 1) is [{ } dest]) {
 			dest = Environment.ExpandEnvironmentVariables(dest);
 			if(!Path.IsPathRooted(dest)) {
 				dest = Path.GetFullPath(Path.Combine(cwd, dest));
 			}
-			
 			if(!TryGoPath(dest)) {
+			
 			}
 			goto Handled;
 		}
-
 		if(cmd is { Length:0 } or null) {
 			return;
 		}
 		main.ctx.fx.commandCount.GetOrAdd(cwd, []).AddOrUpdate(cmd, 1, (_, n) => n + 1);
-
-		bool readProc = false;
+		//bool readProc = false;
 		var pi = new ProcessStartInfo("cmd.exe") {
 			WorkingDirectory = cwd,
 			Arguments = @$"/c {cmd} & pause", 
 			UseShellExecute = true
 		};
-
 		var p = Process.Start(pi);
-
 		Handled:
 		e.term.Text = "";
 		e.Handled = true;
-
 		Task.Run(() => {
 
 		});
@@ -746,16 +732,15 @@ public class ExploreSession {
 		GetMarkedIndex().Select(i => cwdData.list[i]);
 
 	public static void ShowProperties (PathItem item) {
-		var d = new Dialog() {
+		var d = new Dialog {
 			Title= $"Properties: {item.path}",
-
 			Width = Dim.Sized(Math.Min(108, Application.Top.Frame.Width - 8)),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
 		});
 
-		var tv = new TextView() {
+		var tv = new TextView {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -840,6 +825,7 @@ public class ExploreSession {
 				if(p.ignored) {
 					yield return IS_GIT_IGNORED;
 				} else if(p.unchanged) {
+					yield return IS_GIT_UNCHANGED;
 				} else if(p.staged) {
 					yield return IS_GIT_STAGED;
 				} else {
@@ -885,7 +871,6 @@ public class ExploreSession {
 				});
 			});
 		}
-
 		if(item.HasProp(IS_DIRECTORY)) {
 			yield return new MenuBarItem("Explore", null, () => {
 				main.folder.AddTab("Expl", new ExploreSession(main, item.path).root, true);
@@ -904,7 +889,6 @@ public class ExploreSession {
 				]
 			};
 		} else if(item.HasProp(IS_FILE)) {
-
 			yield return new MenuBarItem("Edit", null, () => {
 				main.folder.AddTab($"Edit", new EditSession(main, item.path).root, true, main.root.FirstOrDefault()?.Focused);
 			}) {
@@ -1461,6 +1445,9 @@ public class ExploreSession {
 					$"{new GlyphDefinitions().Checked}" :
 				p.HasProp(IS_GIT_IGNORED) ?
 					$"i" :
+				p.HasProp(IS_GIT_UNCHANGED) ?
+					"." :
+
 				//p.HasProp(IS_REPOSITORY) ? "*" :
 					"").PadRight(8);
 			return $"{name}{type}{size}{lastWrite}{openFreq}{gitInfo}";
@@ -1485,7 +1472,6 @@ public class ExploreSession {
 				var l = Path.GetDirectoryName(item.path).Length + 1;
 				return new PathItem(path[l..].Replace("\\", "/"), path, [.. GetProps(path)]);
 			}
-			cwdData.list.Clear();
 			const string LIBRARIES = "fx:/libraries/";
 			if(s.StartsWith(LIBRARIES)) {
 				var libraryRoot = main.ctx.fx.libraryData[int.Parse(s[LIBRARIES.Length..])];
@@ -1536,7 +1522,7 @@ public class ExploreSession {
 						.MaybeWhere(f)
 						.OrderPath(pathSort)
 				];
-				var _items = items.Except([null]).ToArray();
+				var _items = items.Except([null]).ToList();
 				foreach(var (index, item) in _items.Index()) {
 					/*
 					if(item.entry is { Length: > 0 })
@@ -1545,7 +1531,9 @@ public class ExploreSession {
 					//TODO: fix file number
 					item.entry = $"{index, 3}| {GenerateEntry(item)}";
 				}
-				cwdData.list.AddRange(_items);
+
+				cwdData.list = _items;
+				pathList.SetNeedsDisplay();
 			}
 		}catch(UnauthorizedAccessException e) {
 		}
@@ -1669,7 +1657,7 @@ public class ExploreSession {
 		}
 		main.ctx.fx.accessCount.AddOrUpdate(i.path, 1, (p, n) => n + 1);
 		main.ctx.fx.lastOpened[i.path] = DateTime.Now;
-		RunCmd(@$"cd {cwd} & ""{i.path}""");
+		RunCmd(@$"cd {cwd} & ""{i.path}""", cwd);
 	}
 	void GoPath(string dest) {
 		cwdNext.Clear();
@@ -1809,7 +1797,16 @@ public record PathItem (string local, string path, HashSet<IProp> propSet) {
 				ext.ToLower() :
 			"file";
 	public bool forceReload = false;
-	public DateTime lastWrite = File.GetLastWriteTime(path);
+
+
+	public static DateTime GetLastWrite(string path) =>
+		Directory.Exists(path) ?
+			Directory.GetLastWriteTime(path) :
+			File.GetLastWriteTime(path);
+
+	public bool unchanged => lastWrite >= GetLastWrite(path);
+	public bool isCurrent => unchanged && !forceReload;
+	public DateTime lastWrite = GetLastWrite(path);
 	public DateTime lastAccess = File.GetLastAccessTime(path);
 	private long _size = -1;
 	public long size => _size != -1 ? _size : _size = GetSize();

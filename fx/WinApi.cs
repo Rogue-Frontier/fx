@@ -94,7 +94,7 @@ public static class WinApi {
 	static extern uint GetWindowThreadProcessId (IntPtr hWnd, out uint lpdwProcessId);
 
 	[DllImport("kernel32.dll")]
-	static extern IntPtr OpenProcess (UInt32 dwDesiredAccess, Int32 bInheritHandle, UInt32 dwProcessId);
+	static extern IntPtr OpenProcess (uint dwDesiredAccess, int bInheritHandle, uint dwProcessId);
 
 	[DllImport("psapi.dll")]
 	static extern uint GetModuleFileNameEx (IntPtr hProcess, IntPtr hModule, [Out] StringBuilder lpBaseName, [In][MarshalAs(UnmanagedType.U4)] int nSize);

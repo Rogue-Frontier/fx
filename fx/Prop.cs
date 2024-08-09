@@ -20,6 +20,7 @@ public static class Props {
 		IS_LOCKED = new Prop("locked", "Locked"),
 		IS_FILE = new Prop("file", "File"),
 		IS_DIRECTORY = new Prop("directory", "Directory"),
+		IS_GIT_UNCHANGED = new Prop("gitUnchanged", "- Git Unchanged"),
 		IS_GIT_STAGED = new Prop("gitStagedChanges", "- Staged Changes"),
 		IS_GIT_UNSTAGED = new Prop("gitUnstagedChanges", "- Unstaged Changes"),
 		IS_GIT_IGNORED = new Prop("gitIgnored", "- Git ignored"),

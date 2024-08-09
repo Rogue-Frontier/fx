@@ -48,7 +48,7 @@ namespace fx {
 				Width = Dim.Fill(),
 				Height = Dim.Fill(),
 			};
-			var evData = new ListMarker<Event>(new(), (e, i) => $"{DateOnly.FromDateTime(e.Start.DateTimeDateTimeOffset.Value.DateTime).ToString("yyyy/MM/dd")}: {e.Summary}" ?? "<untitled>");
+			var evData = new ListMarker<Event>((e, i) => $"{DateOnly.FromDateTime(e.Start.DateTimeDateTimeOffset.Value.DateTime).ToString("yyyy/MM/dd")}: {e.Summary}" ?? "<untitled>");
 			RefreshEvents();
 			var evList = new ListView() {
 				AutoSize = false,

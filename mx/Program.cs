@@ -8,10 +8,10 @@ using MailKit.Security;
 using MimeKit;
 
 //aaa
-const string GMailAccount = "alexmchen0@gmail.com";
+const string GMailAccount = "";
 var clientSecrets = new ClientSecrets {
-	ClientId = "40405526811-rql4l5dflr4nqu01u0olqtkipn59fmfg.apps.googleusercontent.com",
-	ClientSecret = "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"
+	ClientId = "",
+	ClientSecret = ""
 };
 var codeFlow = new GoogleAuthorizationCodeFlow(new GoogleAuthorizationCodeFlow.Initializer {
 	DataStore = new FileDataStore("CredentialCacheFolder", false),

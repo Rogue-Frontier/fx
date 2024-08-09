@@ -48,9 +48,6 @@ using App = Terminal.Gui.Application;
 using static Fx;
 using FileMode = System.IO.FileMode;
 
-//var g = new GodotScene("C:\\Users\\alexm\\source\\repos\\Rogue-Frontier-Godot\\Main\\Mainframe.tscn");
-//CppProject.ParseMake("C:\\Users\\alexm\\source\\repos\\IPC\\CMakeLists.txt");
-
 bool expl = true;
 if(args is [string cwd]) {
 	Environment.CurrentDirectory = cwd;
@@ -64,7 +61,6 @@ Environment.SetEnvironmentVariable("PATH",$"{Environment.GetEnvironmentVariable(
 
 var path = Environment.GetEnvironmentVariable("PATH");
 
-int i = 0;
 #if false
 foreach(var a in args) {
 	Console.WriteLine(a);
@@ -73,57 +69,55 @@ Console.WriteLine($"cwd: {Environment.CurrentDirectory}");
 Console.ReadLine();
 #endif
 
-Run:
-
-
+Start:
 App.Init();
-var main = new Main();
 bool crash = false, restart = false;
-try {
-	AppDomain.CurrentDomain.ProcessExit += (a, e) => {
-		main.ctx.Save();
+var main = new Main();
+if(true) {
+	if(expl)
+		main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
+	//main.folder.AddTab("Github", new GithubSession(main, new RepoUrl("godotengine", "godot-builds")).root, true);
+}
+AppDomain.CurrentDomain.ProcessExit += (a, e) => {
+	main.ctx.Save();
+};
+Run:
+App.Top.Add(main.root);
+
+if(false) {
+
+	CmdInfo[] cmdList = [.. CmdStd.GetCmds()];
+	Dialog d = new Dialog() {
+		Title = "Command Builder",
 	};
-	App.Top.Add(main.root);
-	if(true) {
-		if(expl)
-			main.folder.AddTab("Expl", new ExploreSession(main, Environment.CurrentDirectory).root, true);
-		//main.folder.AddTab("Github", new GithubSession(main, new RepoUrl("godotengine", "godot-builds")).root, true);
-	}
-	if(false) {
-
-		CmdInfo[] cmdList = [.. CmdStd.GetCmds()];
-		Dialog d = new Dialog() {
-			Title = "Command Builder",
-		};
-		d.ColorScheme = App.Top.ColorScheme with {
-			Normal = new Attribute(Color.White, Color.Black),
-			Focus = new Attribute(Color.White, Color.Black)
-		};
+	d.ColorScheme = App.Top.ColorScheme with {
+		Normal = new Attribute(Color.White, Color.Black),
+		Focus = new Attribute(Color.White, Color.Black)
+	};
 
 
 
-		Pos X = 1;
-		Pos Y = 1;
+	Pos X = 1;
+	Pos Y = 1;
 
-		var _cmd = new Button() {
-			Text = "$ <command>",
-			AutoSize = false,
-			X = X,
-			Y = Y,
-			Width = 12,
-			Height = 1,
-			NoDecorations = true,
-			NoPadding = true,
-			TextAlignment = TextAlignment.Left
-		};
-		d.Add([_cmd]);
+	var _cmd = new Button() {
+		Text = "$ <command>",
+		AutoSize = false,
+		X = X,
+		Y = Y,
+		Width = 12,
+		Height = 1,
+		NoDecorations = true,
+		NoPadding = true,
+		TextAlignment = TextAlignment.Left
+	};
+	d.Add([_cmd]);
 
-		_cmd.MouseClick += (a, e) => {
-			CmdStd.ICmdModel result = null;
-			var context = new ContextMenu() {
-				Position = new Point(d.Frame.X + _cmd.Frame.X + 1, d.Frame.Y + _cmd.Frame.Y + 1),
-				MenuItems = new MenuBarItem([
-					..from cmd in cmdList select new MenuItem(cmd.name, null, () => {
+	_cmd.MouseClick += (a, e) => {
+		CmdStd.ICmdModel result = null;
+		var context = new ContextMenu() {
+			Position = new(d.Frame.X + _cmd.Frame.X + 1, d.Frame.Y + _cmd.Frame.Y + 1),
+			MenuItems = new([ ..from cmd in cmdList select new MenuItem(cmd.name, "", () => {
 						result = (CmdStd.ICmdModel)cmd.t.GetConstructor(BindingFlags.Instance | BindingFlags.Public, [])!.Invoke([]);
 						_cmd.Width = cmd.name.Length + 2;
 						_cmd.Text = $"$ {cmd.name}";
@@ -258,19 +252,15 @@ try {
 						}
 						d.SetNeedsDisplay();
 					})
-				])
-			};
-			context.Show();
-			e.Handled = true;
+			])
 		};
-		
-		App.Run(d);
-	}
-
+		context.Show();
+		e.Handled = true;
+	};
+}
+try {
 	App.Run();	
-} catch (Exception e){
-	throw;
-
+} catch (Exception e) {
 	main.ctx.Save();
 	App.Shutdown();
 
@@ -293,7 +283,11 @@ try {
 	*/
 
 	Console.ReadLine();
+	/*
+	App.Init();
 	goto Run;
+	*/
+	goto Start;
 	
 	throw;
 } finally {
@@ -311,7 +305,7 @@ try {
 	main.ctx.Save();
 	App.Shutdown();
 }
-goto Run;
+goto Start;
 public class Main {
 	public Ctx ctx;
 	public View[] root;
@@ -442,7 +436,12 @@ public class Main {
 			//Text = "fx"
 		};
 		window.KeyDownD(new() {
-			[(int)Delete] = _ => folder.RemoveTab(),
+			[(int)Delete] = _ => {
+				if(folder.currentBody == homeSession.root) {
+					return;
+				}
+				folder.RemoveTab();
+			},
 			['<'] = _ => folder.SwitchTab(-1),
 			['>'] = _ => folder.SwitchTab(1),
 			[':'] = _ => FocusTerm(window.Focused),
@@ -465,10 +464,7 @@ public class Main {
 			Visible = true,
 			Enabled = true,
 			Menus = [..GetBarItems()],
-
-
 		};
-
 
 		var b = new Attribute(Color.White, Color.Black);
 		var w = new Attribute(Color.White, new Color(75, 75, 75));
@@ -484,10 +480,8 @@ public class Main {
 		windowMenuBar.MenuOpening += (a, e) => {
 			windowMenuBar.Menus = [..GetBarItems()];
 			var c = e.CurrentMenu;
-
 			if(e.CurrentMenu.Title == "_Switch") {
-
-				//e.CurrentMenu.Children.First(t => t.Title == folder.currentTab.name)
+				e.CurrentMenu.Children.First(t => t.Title == folder.currentTab.name);
 			}
 		};
 		
@@ -539,12 +533,13 @@ public record Fx {
 	public void Load (Ctx ctx) {
 		if(File.Exists(SAVE_PATH)) {
 			try {
-				var o = new Deserializer().Deserialize<Fx>(File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, Ctx.USER_PROFILE));
+				var data = File.ReadAllText(SAVE_PATH).Replace(Ctx.USER_PROFILE_MASK, Ctx.USER_PROFILE);
+				var o = new Deserializer().Deserialize<Fx>(data);
 				foreach(var f in GetType().GetFields( BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)) {
 					f.Copy(this, o);
 				}
 			} catch(Exception e) {
-
+				throw;
 			}
 #if false
 			catch {
@@ -555,7 +550,13 @@ public record Fx {
 		}
 	}
 
-	public record DirIndex (string[] dir, string[] file);
+	public record DirIndex (string path, string[] dir, string[] file) {
+		DateTime lastWrite = PathItem.GetLastWrite(path);
+		public bool IsCurrent => lastWrite >= PathItem.GetLastWrite(path);
+
+		public void Deconstruct (out string[] dir, out string[] file) =>
+			(dir, file) = (this.dir, this.file);
+	}
 }
 public record Ctx {
 	public static string Anonymize (string path) => path.Replace(USER_PROFILE, USER_PROFILE_MASK);
@@ -597,20 +598,20 @@ public record Ctx {
 			RunCmd(c.GetCmd(item.path), c.cd ? item.path : null)
 		));
 	public delegate IEnumerable<IProp> GetProps (string path);
-	public bool IsCurrent(string path, out PathItem item) =>
-		cache.item.TryGetValue(path, out item)
-		&& item.lastWrite >= File.GetLastWriteTime(item.path)
-		&& !item.forceReload;
+	public bool IsCurrent(string path, [NotNullWhen(true)] out PathItem? item) =>
+		cache.item.TryGetValue(path, out item) && item.isCurrent;
 	public PathItem UpdatePathCache (string path, GetProps GetProps) => cache.item[path] = new PathItem(Path.GetFileName(path), path, [.. GetProps(path)]);
 	public PathItem GetPathItem(string path, GetProps GetProps) =>
 		IsCurrent(path, out var item) ?
 			item :
 			UpdatePathCache(path, GetProps);
 	public (string[] dir, string[] file) GetSubPaths (string path) {
-		var r = 
-			IsCurrent(path, out _) && cache.dir.TryGetValue(path, out var entry) ?
-				entry :
-				cache.dir[path] = new(Directory.GetDirectories(path), Directory.GetFiles(path));
+		DirIndex r;
+		if(cache.dir.TryGetValue(path, out var entry) && entry.IsCurrent) {
+			r = entry;
+		} else {
+			r = cache.dir[path] = new(path, Directory.GetDirectories(path), Directory.GetFiles(path));
+		}
 		var (dir, file) = r;
 		return (dir, file);
 	}
@@ -620,9 +621,9 @@ public record Ctx {
 		public static string SAVE_PATH { get; } =
 			$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/cache.yaml";
 
-		public ConcurrentDictionary<string, DirIndex> dir = new();
-		public ConcurrentDictionary<string, PathItem> item = new();
-		public ConcurrentDictionary<string, string[]> content = new();
+		public ConcurrentDictionary<string, DirIndex> dir = [];
+		public ConcurrentDictionary<string, PathItem> item = [];
+		public ConcurrentDictionary<string, string[]> content = [];
 	}
 	public record Git {
 		public string root => repo.GetRoot();

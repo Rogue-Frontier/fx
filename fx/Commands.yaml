@@ -83,7 +83,7 @@
     file:
       - ext: png
 - name: Edit in ASECII
-  fmt: C:\Users\alexm\source\repos\ASECII\ASECII\bin\Debug\net9.0\ASECII.exe {0}
+  fmt: '%USERPROFILE%\source\repos\ASECII\ASECII\bin\Debug\net9.0\ASECII.exe {0}'
   targetAny:
     file:
       - ext: asc

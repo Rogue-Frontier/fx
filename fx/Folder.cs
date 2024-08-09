@@ -7,6 +7,7 @@ using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using System.Security.Cryptography.X509Certificates;
 using EnumerableExtensions;
+using System.Diagnostics.CodeAnalysis;
 namespace fx;
 //TO DO: Move tabs to side
 public record Folder {
@@ -16,7 +17,7 @@ public record Folder {
 	public Tab currentTab => tabs[currentBody];
 	private Dictionary<Tab, View> prevView = [];
 	public Folder(View root, params(string name, View view)[] tabs) {
-		var head = new View() {
+		var head = new View {
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(),
@@ -24,7 +25,7 @@ public record Folder {
 			//Height = 3,
 			//BorderStyle = LineStyle.Single
 		};
-		var body = new View() {
+		var body = new View {
 			X = 0,
 			Y = Pos.Bottom(head),
 			Width = Dim.Fill(),
@@ -36,7 +37,6 @@ public record Folder {
 	public Folder(View root, View head, View body, params (string name, View view)[] tabs) {
 		Init(root, head, body, tabs);
 	}
-
 	private void Init(View root, View head, View body, params (string name, View view)[] tabs) {
 		this.root = root;
 		this.head = head;
@@ -47,7 +47,7 @@ public record Folder {
 	}
 	public void Refresh () {
 		head.RemoveAll();
-		var barLeft = new View() {
+		var barLeft = new View {
 			Title = "  ",
 			X = 0,
 			Y = 0,
@@ -59,28 +59,29 @@ public record Folder {
 			tab.AddTo(this);
 		head.SetNeedsDisplay();
 	}
-	public Tab AddTab(string name, View view, bool show = false, View prevItem = null) {
+	public Tab AddTab(string name, View view, bool show = false, View? prevItem = null) {
 		var tab = new Tab(name, view);
 		tab.AddTo(this);
 		tabs[view] = tab;
-		if(prevItem != null)
-			prevView[tab] = prevItem;
+		if(prevItem is { }pi)
+			prevView[tab] = pi;
 		if(show)
 			FocusTab(tab);
 		return tab;
 	}
 	public bool RemoveTab () {
-		var b = RemoveTab(currentBody, out var tab);
-		if(prevView.TryGetValue(tab, out var v) && GetParentTab(v, out var t)) {
-			FocusTab(t);
-			v.SetFocus();
+		if(RemoveTab(currentBody, out var tab)) {
+			if(prevView.TryGetValue(tab, out var v) && GetParentTab(v, out var t)) {
+				FocusTab(t);
+				v.SetFocus();
+			}
+			return true;
 		}
-		return b;
+		return false;
 	}
-	public bool RemoveTab(View view, out Tab tab) {
+	public bool RemoveTab(View view, [NotNullWhen(true)] out Tab? tab) {
 		var tabList = tabs.Values.ToList();
-		bool b = tabs.Remove(view, out tab);
-		if(b) {
+		if(tabs.Remove(view, out tab)) {
 			prevView.Remove(tab);
 			if(currentBody == view) {
 				body.RemoveAll();
@@ -88,14 +89,15 @@ public record Folder {
 					FocusTab(tabList[Math.Clamp(tabList.IndexOf(tab), 0, tabs.Values.Count - 1)]);
 			}
 			Refresh();
+			return true;
 		}
-		return b;
+		return false;
 	}
-	public bool GetParentTab(View v, out Tab tab) {
+	public bool GetParentTab(View v, out Tab? tab) {
 		tab = null;
-		while(v != null && !tabs.TryGetValue(v, out tab))
+		while(v is {} && !tabs.TryGetValue(v, out tab))
 			v = v.SuperView;
-		return tab != null;
+		return tab is {};
 	}
 	public void FocusTab(Tab tab, bool focus = true) {
 		SelectTab(tab);
@@ -114,7 +116,7 @@ public record Folder {
 		if(c < 2)
 			return;
 		FocusTab(
-			currentBody is { }v ?
+			currentBody is {} v ?
 				tabs.Values.ElementAt((tabs.Keys.IndexOf(v) + inc + c) % c) :
 				tabs.Values.First(),
 			true
@@ -144,7 +146,7 @@ public record Tab {
 		leftBar = head.Subviews.Last();
 		tab = new Lazy<View>(() => {
 			bool home = name == "Home";
-			var root = new Label() {
+			var root = new Label {
 				AutoSize = false,
 				Title = name,
 				X = Pos.Right(leftBar),
@@ -157,7 +159,7 @@ public record Tab {
 			});
 
 			if(!home) {
-				var kill = new Label() {
+				var kill = new Label {
 					Title = "[X]",
 					X = Pos.AnchorEnd(3),
 					Y = 0,
@@ -169,7 +171,7 @@ public record Tab {
 			}
 			return root;
 		}).Value;
-		rightBar = new View() {
+		rightBar = new View {
 			Title = "%%",
 			X = Pos.Right(tab) + 0,
 			Y = 0,
