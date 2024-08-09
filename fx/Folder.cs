@@ -6,7 +6,6 @@ using fx;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using System.Security.Cryptography.X509Certificates;
-using EnumerableExtensions;
 using System.Diagnostics.CodeAnalysis;
 namespace fx;
 //TO DO: Move tabs to side
@@ -117,7 +116,7 @@ public record Folder {
 			return;
 		FocusTab(
 			currentBody is {} v ?
-				tabs.Values.ElementAt((tabs.Keys.IndexOf(v) + inc + c) % c) :
+				tabs.Values.ElementAt((tabs.Keys.ToList().IndexOf(v) + inc + c) % c) :
 				tabs.Values.First(),
 			true
 			);

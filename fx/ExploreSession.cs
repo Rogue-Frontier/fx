@@ -2,10 +2,8 @@ using System.Text.RegularExpressions;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Xml.Linq;
-using EnumerableExtensions;
 using LibGit2Sharp;
 using Terminal.Gui;
-using IWshRuntimeLibrary;
 using File = System.IO.File;
 using Application = Terminal.Gui.Application;
 using Label = Terminal.Gui.Label;
@@ -359,7 +357,7 @@ public class ExploreSession {
 				RefreshDirListing(cwd);
 				pathList.SetNeedsDisplay();
 			}
-			foreach(var(i, c) in sorts.Index())
+			foreach(var(i, c) in sorts.Select((c, i) => (i, c)))
 				c.MouseClick += (a, e) => SetSort(i);
 			pathList.MouseEvD(new() {
 				[(int)Button1DoubleClicked] = e => {
@@ -514,7 +512,7 @@ public class ExploreSession {
 							pair.index > index && StartsWith(pair);
 						bool StartsWith ((int index, PathItem item) pair) =>
 							pair.item.local.StartsWith(c, StringComparison.CurrentCultureIgnoreCase);
-						var pairs = cwdData.list.Index();
+						var pairs = cwdData.list.Select((c, Index) => (Index, c));
 						var dest = pairs.FirstOrDefault(P, pairs.FirstOrDefault(StartsWith, (-1, null)));
 						if(dest.Index == -1) return;
 						pathList.SelectedItem = dest.Index;
@@ -797,9 +795,10 @@ public class ExploreSession {
 			}
 			if(path.EndsWith(".lnk")) {
 				// WshShellClass shell = new WshShellClass();
-				WshShell shell = new WshShell(); //Create a new WshShell Interface
-				IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
-				yield return IS_LINK_TO.Make(link.TargetPath);
+				//WshShell shell = new WshShell(); //Create a new WshShell Interface
+				//IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
+				//yield return IS_LINK_TO.Make(link.TargetPath);
+				throw new Exception("Link unsupported");
 			}
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;
@@ -808,7 +807,7 @@ public class ExploreSession {
 				yield return IS_PYTHON;
 
 		} else {
-			throw new Exception("What the hell is wrong with you?");
+			throw new Exception("Oops");
 		}
 	}
 
@@ -1513,17 +1512,17 @@ public class ExploreSession {
 						.Select(GetPathItem)
 						.Select(transform)
 						.Except([null])
-						.Except(p => main.ctx.fx.hidden.Contains(p.path))
+						.Where(p => !main.ctx.fx.hidden.Contains(p.path))
 						.MaybeWhere(f)
 						.OrderPath(pathSort),
 					..files
 						.Select(GetPathItem)
-						.Except(p => main.ctx.fx.hidden.Contains(p.path))
+						.Where(p => !main.ctx.fx.hidden.Contains(p.path))
 						.MaybeWhere(f)
 						.OrderPath(pathSort)
 				];
 				var _items = items.Except([null]).ToList();
-				foreach(var (index, item) in _items.Index()) {
+				foreach(var (index, item) in _items.Select((c, i) => (i, c))) {
 					/*
 					if(item.entry is { Length: > 0 })
 						continue;

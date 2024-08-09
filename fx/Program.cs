@@ -17,7 +17,6 @@ using View = Terminal.Gui.View;
 using static SView;
 using System.IO;
 using System.IO.Compression;
-using IWshRuntimeLibrary;
 using File = System.IO.File;
 using fx;
 using System.Reflection.Metadata;

@@ -1,5 +1,4 @@
 ﻿using ClangSharp;
-using EnumerableExtensions;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
