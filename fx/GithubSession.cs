@@ -14,8 +14,8 @@ public class GithubSession {
 	public View root;
 	public GitHubClient client;
 	public GithubSession (Main main, RepoUrl url) {
-		client = new GitHubClient(new ProductHeaderValue("IHaveAStrongPassword"));
-		client.Credentials = new Credentials("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");
+		client = new GitHubClient(new ProductHeaderValue(""));
+		client.Credentials = new Credentials("");
 		var id = client.Repository.Get(url.owner, url.repo).Result.Id;
 		ConcurrentDictionary<string, byte[]> files = new();
 		byte[] GetFile (string path) => files.GetOrAdd(path, p => client.Repository.Content.GetRawContent(url.owner, url.repo, path).Result);
