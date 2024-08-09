@@ -1,5 +1,7 @@
 # fx
-AC's personal file explorer.
+![image](https://github.com/user-attachments/assets/03305e84-de8b-4ee4-916c-2ca00481094c)
+
+fx is my custom Terminal-based file explorer and multi-tool intended to replace `explorer.exe` for everyday usage.
 
 # Tabs
 - [Home]
