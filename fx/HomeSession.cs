@@ -339,7 +339,7 @@ public interface IFileTree {
 	static string GetPathName(string path) =>
 		(path == Path.GetPathRoot(path) ?
 			path :
-			$"{(!Path.Exists(path) ? "!" : "")}{(Path.GetDirectoryName(path) is { } par ?
+			$"{(!Path.Exists(path) ? "[missing] " : "")}{(Path.GetDirectoryName(path) is { } par ?
 					(par == Path.GetPathRoot(path) ? par : $"{Path.GetFileName(par)}/") :
 					Path.GetPathRoot(path))}{Path.GetFileName(path)}").Replace("\\", "/");
 }
