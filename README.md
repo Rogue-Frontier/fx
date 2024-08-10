@@ -6,7 +6,13 @@ fx is my custom Terminal-based file explorer and multi-tool intended to replace 
 # Build
 
 - Install .NET 8.0
-- Clone `https://github.com/IHaveAStrongPassword/Terminal.Gui` branch `v2_develop`
+```
+git clone git@github.com:IHaveAStrongPassword/Terminal.Gui.git
+git clone git@github.com:Rogue-Frontier/fx.git
+cd fx/fx
+dotnet run
+```
+
 
 # Tabs
 - [Home]
