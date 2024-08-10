@@ -7,7 +7,7 @@ fx is my custom Terminal-based file explorer and multi-tool intended to replace 
 
 - Install .NET 8.0
 ```
-git clone git@github.com:IHaveAStrongPassword/Terminal.Gui.git
+git clone git@github.com:Rogue-Frontier/TermSharp.git
 git clone git@github.com:Rogue-Frontier/fx.git
 cd fx/fx
 dotnet run
