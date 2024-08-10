@@ -40,11 +40,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Folder Include="Executables\" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="Terminal.Gui">
-      <HintPath>..\..\Terminal.Gui\Terminal.Gui\bin\Release\net8.0\publish\win-x64\Terminal.Gui.dll</HintPath>
-    </Reference>
+    <ProjectReference Include="..\..\Terminal.Gui\Terminal.Gui\Terminal.Gui.csproj" />
   </ItemGroup>
 </Project>
