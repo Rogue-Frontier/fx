@@ -25,7 +25,7 @@ public class EditSession {
 		};
 		/*
 		var save = new Button() {
-			AutoSize = false,
+			
 			X = 0,
 			Y = 0,
 			Width = 6,
@@ -59,7 +59,6 @@ public class EditSession {
 			BorderStyle = LineStyle.Single
 		};
 		var mode = new Label() {
-			AutoSize = false,
 			X = Pos.AnchorEnd(4),
 			Y = 0,
 			Width = 4,
@@ -67,7 +66,6 @@ public class EditSession {
 			Text = "EDIT",
 		};
 		var address = new Label() {
-			AutoSize = false,
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill() - 16,
@@ -75,7 +73,6 @@ public class EditSession {
 		};
 		address.Text = path;
 		var lineNumbers = new Label() {
-			AutoSize = false,
 			X = 0,
 			Y = Pos.Bottom(address),
 			Width = 5,
@@ -126,7 +123,7 @@ public class EditSession {
 		});
 		quickAccess.MouseEvD(new() {
 			[(int)Button1Pressed] = e => {
-				var y = e.MouseEvent.Y;
+				var y = e.MouseEvent.Position.Y;
 
 				var row = y + quickAccess.ScrollOffsetVertical;
 				var rowObj = quickAccess.GetObjectOnRow(row);
@@ -149,7 +146,7 @@ public class EditSession {
 			},
 			[(int)Button1Released] = e => {
 
-				var y = e.MouseEvent.Y;
+				var y = e.MouseEvent.Position.Y;
 
 				var row = y + quickAccess.ScrollOffsetVertical;
 				var rowObj = quickAccess.GetObjectOnRow(row);
@@ -165,10 +162,10 @@ public class EditSession {
 			},
 			[(int)Button3Pressed] = e => {
 				var prevObj = quickAccess.SelectedObject;
-				var y = e.MouseEvent.Y;
+				var y = e.MouseEvent.Position.Y;
 				var row = y + quickAccess.ScrollOffsetVertical;
 				var rowObj = quickAccess.GetObjectOnRow(row);
-				var c = SView.ShowContext(quickAccess, [.. HomeSession.GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.X);
+				var c = SView.ShowContext(quickAccess, [.. HomeSession.GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.Position.X);
 				if(row < main.ctx.fx.libraryData.Count) {
 					c.MenuBar.MenuAllClosed += (a, e) => {
 						if(main.ctx.fx.libraryData.Count == 0) {

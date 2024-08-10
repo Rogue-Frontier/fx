@@ -143,7 +143,6 @@ public record Tab {
 		tab = new Lazy<View>(() => {
 			bool home = name == "Home";
 			var root = new Label {
-				AutoSize = false,
 				Title = name,
 				X = Pos.Right(leftBar),
 				Y = 0,

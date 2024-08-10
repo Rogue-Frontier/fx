@@ -7,7 +7,7 @@ namespace fx {
 		public View root;
 		public TermSession(Main main, string cwd) {
 			root = new View() {
-				AutoSize = false,
+				
 				X = 0,
 				Y=0,
 				Width=Dim.Fill(),
@@ -15,7 +15,7 @@ namespace fx {
 			};
 			var tree = new FileTree();
 			var fileTree = new TreeView<string>() {
-				AutoSize = false,
+				
 				X = 0,
 				Y = 1,
 				Width = 32,
@@ -33,7 +33,7 @@ namespace fx {
 
 
 			var cwdBar = new TextField() {
-				AutoSize = false,
+				
 				X = 0,
 				Y = 0,
 				Width = Dim.Fill(),
@@ -133,7 +133,7 @@ namespace fx {
 						*/
 						//output.Text += text + '\n';
 						output.Text+=($"{text}\n");
-						output.ScrollTo(output.Lines - output.Bounds.Height - 1);
+						output.ScrollTo(output.Lines - output.Frame.Height - 1);
 					});
 				}
 			};

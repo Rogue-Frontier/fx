@@ -4,6 +4,7 @@ using Terminal.Gui;
 using static Terminal.Gui.MouseFlags;
 using static Terminal.Gui.KeyCode;
 using GDShrapt.Reader;
+using System.Collections.Specialized;
 namespace fx;
 public class HomeSession {
 	public View root;
@@ -77,7 +78,7 @@ public class HomeSession {
 		};
 		quickAccess.MouseEvD(new() {
 			[(int)Button1Pressed] = e => {
-				var y = e.MouseEvent.Y;
+				var y = e.MouseEvent.Position.Y;
 
 				var row = y + quickAccess.ScrollOffsetVertical;
 				var rowObj = quickAccess.GetObjectOnRow(row);
@@ -100,7 +101,7 @@ public class HomeSession {
 			},
 			[(int)Button1Released] = e => {
 
-				var y = e.MouseEvent.Y;
+				var y = e.MouseEvent.Position.Y;
 
 				var row = y + quickAccess.ScrollOffsetVertical;
 				var rowObj = quickAccess.GetObjectOnRow(row);
@@ -116,10 +117,10 @@ public class HomeSession {
 			},
 			[(int)Button3Pressed] = e => {
 				var prevObj = quickAccess.SelectedObject;
-				var y = e.MouseEvent.Y;
+				var y = e.MouseEvent.Position.Y;
 				var row = y + quickAccess.ScrollOffsetVertical;
 				var rowObj = quickAccess.GetObjectOnRow(row);
-				var c = SView.ShowContext(quickAccess, [.. GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.X);
+				var c = SView.ShowContext(quickAccess, [.. GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.Position.X);
 				if(row < main.ctx.fx.libraryData.Count) {
 					c.MenuBar.MenuAllClosed += (a, e) => {
 						if(main.ctx.fx.libraryData.Count == 0) {
@@ -190,7 +191,7 @@ public class HomeSession {
 		pinList.MouseEvD(new() {
 			[(int)Button3Pressed] = e => {
 				var prev = pinList.SelectedItem;
-				var i = pinList.TopItem + e.MouseEvent.Y;
+				var i = pinList.TopItem + e.MouseEvent.Position.Y;
 				if(i >= pinData.Count) {
 					//Show same menu as .
 					return;
@@ -199,7 +200,7 @@ public class HomeSession {
 				var c = SView.ShowContext(quickAccess, [
 					new MenuItem("Cancel", null, () => { }),
 					.. ExploreSession.GetStaticActions(main, ctx.GetPathItem(pinData.list[i], ExploreSession.GetStaticProps))
-					], e.MouseEvent.Y - 1, e.MouseEvent.ScreenPosition.X - 1);
+					], e.MouseEvent.Position.Y - 1, e.MouseEvent.ScreenPosition.X - 1);
 				c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
 					if(prev == -1) {
 						return;
@@ -375,7 +376,12 @@ public record ListMarker<T> (Func<T, int, string> GetString) : IListDataSource w
 	} }
 	public int Count => list.Count;
 	public int Length { get; }
+	public bool SuspendCollectionChangedEvent { set; get; }
+
 	public HashSet<T> marked = new();
+
+	public event NotifyCollectionChangedEventHandler CollectionChanged;
+
 	public bool IsMarked (int item) => list.Count == 0 ? false : marked.Contains(list[item]);
 	public void Render (ListView container, ConsoleDriver driver, bool selected, int item, int col, int line, int width, int start = 0) {
 		container.Move(col, line);
@@ -386,7 +392,7 @@ public record ListMarker<T> (Func<T, int, string> GetString) : IListDataSource w
 			str = GetString(t, item);
 		}
 
-		string u = TextFormatter.ClipAndJustify(str, width, TextAlignment.Left);
+		string u = TextFormatter.ClipAndJustify(str, width, Alignment.Start);
 		driver.AddStr(u);
 		width -= u.GetColumns();
 		while(width-- > 0) {
@@ -409,4 +415,6 @@ public record ListMarker<T> (Func<T, int, string> GetString) : IListDataSource w
 		((Func<T, bool>)(marked.Contains(v) ? marked.Remove : marked.Add))(v);
 	}
 	public IList ToList () => list;
+
+	void IDisposable.Dispose () { }
 }

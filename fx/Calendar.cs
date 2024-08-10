@@ -34,7 +34,6 @@ namespace fx {
 				HttpClientInitializer = credentials
 			});
 			root = new View() {
-				AutoSize = false,
 				X = 0,
 				Y = 0,
 				Width = Dim.Fill(),
@@ -43,7 +42,6 @@ namespace fx {
 			var evData = new ListMarker<Event>((e, i) => $"{DateOnly.FromDateTime(e.Start.DateTimeDateTimeOffset.Value.DateTime).ToString("yyyy/MM/dd")}: {e.Summary}" ?? "<untitled>");
 			RefreshEvents();
 			var evList = new ListView() {
-				AutoSize = false,
 				X = 0,
 				Y = 1,
 				Width = Dim.Percent(25),
@@ -88,7 +86,6 @@ namespace fx {
 			});
 			var evView = new View() {
 				Title = "Details",
-				AutoSize = false,
 				X = Pos.Right(evList),
 				Y = 0,
 				Width = Dim.Fill(),
@@ -97,7 +94,6 @@ namespace fx {
 			};
 			var create = new Button() {
 				Title = "New Event",
-				AutoSize = false,
 				X = 0,
 				Y = 0,
 				Width = Dim.Percent(25),
@@ -117,7 +113,6 @@ namespace fx {
 				int x = 0;
 				int y = 0;
 				var timeLabel = new Label() {
-					AutoSize = false,
 					X = x,
 					Y = y,
 					Width = 8,
@@ -191,8 +186,7 @@ namespace fx {
 						Y = y,
 						Width = width,
 						Height = 1,
-						AutoSize = false,
-						TabStop = true,
+						//TabStop = true,
 						CanFocus = true,
 						ReadOnly = false
 					}.Constrain(width);
@@ -205,7 +199,8 @@ namespace fx {
 					};
 					bool busy = false;
 					if(input != null)
-						t.TextChanged += (a, e) => {
+
+						t.TextChanging += (a, e) => {
 							if(busy) {
 								return;
 							}
@@ -214,7 +209,7 @@ namespace fx {
 								input(int.Parse(e.NewValue));
 							} catch(Exception c) {
 								e.Cancel = true;
-								t.Text = e.OldValue;
+								t.Text = e.CurrentValue;
 							} finally {
 								busy = false;
 							}
@@ -229,8 +224,6 @@ namespace fx {
 						Y = y,
 						Width = width,
 						Height = 1,
-						AutoSize = false,
-						TabStop = false,
 						CanFocus = false,
 						ReadOnly = true
 					}.Constrain(width);
@@ -239,7 +232,6 @@ namespace fx {
 				}
 				y++;
 				var repeatLabel = new Label() {
-					AutoSize = false,
 					X = 0,
 					Y = y,
 					Width = 8,
@@ -269,7 +261,6 @@ namespace fx {
 				x = 32;
 				y = 0;
 				var nameLabel = new Label() {
-					AutoSize = false,
 					X = x,
 					Y = y,
 					Width = 8,
@@ -277,7 +268,6 @@ namespace fx {
 					Text = "Name",
 				};
 				var nameField = new TextField() {
-					AutoSize = false,
 					X = Pos.Right(nameLabel),
 					Y = y,
 					Width = Dim.Fill(),
@@ -285,7 +275,6 @@ namespace fx {
 				};
 				y++;
 				var descLabel = new Label() {
-					AutoSize = false,
 					X = x,
 					Y = y,
 					Width = 8,
@@ -293,7 +282,6 @@ namespace fx {
 					Text = "Desc",
 				};
 				var descField = new TextField() {
-					AutoSize = false,
 					X = Pos.Right(descLabel),
 					Y = y,
 					Width = Dim.Fill(),
@@ -305,10 +293,10 @@ namespace fx {
 				var ev = new Event();
 				ev.Summary = nameField.Text;
 				ev.Description = descField.Text;
-				nameField.TextChanged += (a, e) => {
+				nameField.TextChanging += (a, e) => {
 					ev.Summary = e.NewValue;
 				};
-				descField.TextChanged += (a, e) => {
+				descField.TextChanging += (a, e) => {
 					ev.Description = e.NewValue;
 				};
 				confirm.MouseClick += (a, e) => {
@@ -336,7 +324,7 @@ namespace fx {
 						case 2: {//Weekly
 								var _freq = $"FREQ=WEEKLY;";
 								var _byday = string.Join(",", days
-									.Where(pair => pair.Value.Checked == true)
+									.Where(pair => pair.Value.CheckedState == CheckState.Checked)
 									.Select(pair => pair.Key)) is { Length: > 0 } str ?
 										$"BYDAY={str};" :
 										"";
@@ -379,14 +367,12 @@ namespace fx {
 				var y = 0;
 				var nameLabel = new Label() {
 					Text = "Name",
-					AutoSize = false,
 					X = 0,
 					Y = y,
 					Width = 8,
 					Height = 1
 				};
 				var nameField = new Label() {
-					AutoSize=false,
 					X = Pos.Right(nameLabel),
 					Y = y,
 					Width = Dim.Fill(),
@@ -395,14 +381,12 @@ namespace fx {
 				y++;
 				var locLabel = new Label() {
 					Text = "Loc",
-					AutoSize = false,
 					X = 0,
 					Y = y,
 					Width = 8,
 					Height = 1
 				};
 				var locField = new Label() {
-					AutoSize = false,
 					X = Pos.Right(locLabel),
 					Y = y,
 					Width = Dim.Fill(),
@@ -411,14 +395,12 @@ namespace fx {
 				y++;
 				var descLabel = new Label() {
 					Text = "Desc",
-					AutoSize = false,
 					X = 0,
 					Y = y,
 					Width = 8,
 					Height = 1
 				};
 				var descField = new Label() {
-					AutoSize=false,
 					X = Pos.Right(descLabel),
 					Y = y,
 					Width = Dim.Fill(),
@@ -468,14 +450,17 @@ public static class SField {
 			switch(k.KeyCode) {
 				case KeyCode.CursorLeft:
 					if(f.CursorPosition == 0) {
-						f.FocusPrev();
+						f.AdvanceFocus(NavigationDirection.Backward, TabBehavior.TabStop);
 					} else {
 						f.CursorPosition--;
 					}
 					k.Handled = true;
 					return;
 				case KeyCode.CursorRight:
-					if(f.CursorPosition == width - 1) { f.FocusNext(); } else {
+					if(f.CursorPosition == width - 1) {
+						f.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop);
+					
+					} else {
 						f.CursorPosition++;
 					}
 					k.Handled = true;
@@ -493,7 +478,7 @@ public static class SField {
 			if(f.CursorPosition < width - 1) {
 				f.CursorPosition++;
 			} else {
-				f.FocusNext();
+				f.AdvanceFocus(NavigationDirection.Forward, TabBehavior.TabStop);
 			}
 			k.Handled = true;
 		};

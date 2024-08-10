@@ -29,7 +29,7 @@ public class FindSession {
 		int w = 8;
 		int y = 0;
 		var rootLabel = new Label() {
-			AutoSize = false,
+			
 			Title= "Dir",
 			X = 0,
 			Y = y,
@@ -37,7 +37,7 @@ public class FindSession {
 			Height = 1
 		};
 		rootBar = new TextField() {
-			AutoSize = false,
+			
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
@@ -46,7 +46,7 @@ public class FindSession {
 		};
 
 		var rootShowButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(rootBar),
 			Y = y,
 			Width = 6,
@@ -57,7 +57,7 @@ public class FindSession {
 		};
 		y++;
 		var filterLabel = new Label() {
-			AutoSize = false,
+			
 			X = 0,
 			Y = y,
 			Width = w,
@@ -65,14 +65,14 @@ public class FindSession {
 			Text = "File"
 		};
 		var filterBar = new TextField() {
-			AutoSize = false,
+			
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
 			Height = 1,
 		};
 		var filterShowButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(filterBar),
 			Y = y,
 			Width = 6,
@@ -83,7 +83,7 @@ public class FindSession {
 		};
 		y++;
 		var findLabel = new Label() {
-			AutoSize = false,
+			
 			X = 0,
 			Y = y,
 			Width = w,
@@ -91,14 +91,14 @@ public class FindSession {
 			Text = "Line"
 		};
 		var findBar = new TextField() {
-			AutoSize = false,
+			
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
 			Height = 1,
 		};
 		var findAllButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(findBar),
 			Y = y,
 			Width = 6,
@@ -108,7 +108,7 @@ public class FindSession {
 			NoPadding = true
 		};
 		var findPrevButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(findAllButton),
 			Y = y,
 			Width = 6,
@@ -118,7 +118,7 @@ public class FindSession {
 			NoPadding = true
 		};
 		var findNextButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(findPrevButton),
 			Y = y,
 			Width = 6,
@@ -130,7 +130,7 @@ public class FindSession {
 		y++;
 		/*
 		var replaceLabel = new Label() {
-			AutoSize = false,
+			
 			X = 0,
 			Y = y,
 			Width = w,
@@ -138,14 +138,14 @@ public class FindSession {
 			Text = "Replace",
 		};
 		var replaceBar = new TextField() {
-			AutoSize = false,
+			
 			X = w,
 			Y = y,
 			Width = Dim.Fill(24),
 			Height = 1
 		};
 		var replaceAllButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(findBar),
 			Y = y,
 			Width = 6,
@@ -155,7 +155,7 @@ public class FindSession {
 			NoPadding = true
 		};
 		var replacePrevButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(findAllButton),
 			Y = y,
 			Width = 6,
@@ -165,7 +165,7 @@ public class FindSession {
 			NoPadding = true
 		};
 		var replaceNextButton = new Button() {
-			AutoSize = false,
+			
 			X = Pos.Right(findPrevButton),
 			Y = y,
 			Width = 6,
@@ -240,11 +240,11 @@ public class FindSession {
 		tree.MouseClickD(new() {
 			[Button3Clicked] = e => {
 				var prev = tree.SelectedObject;
-				var row = e.MouseEvent.Y;
+				var row = e.MouseEvent.Position.Y;
 				if(tree.GetObjectOnRow(row) is not { } o)
 					return;
 				tree.SelectedObject = tree.GetObjectOnRow(row);
-				var c = ShowContext(tree.SelectedObject, row - 1, e.MouseEvent.X);
+				var c = ShowContext(tree.SelectedObject, row - 1, e.MouseEvent.Position.X);
 				/*
 				c.MenuItems.Children.ToList().ForEach(it => it.Action += () => {
 					int i = 0;

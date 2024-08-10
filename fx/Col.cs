@@ -41,10 +41,10 @@ namespace fx {
             var x = 0f;
 			foreach(var i in items) {
                 var v = i.GetView();
-				v.X = Pos.Percent(x);
+				v.X = Pos.Percent((int)x);
 				var frac = i.Width.fraction.Clamp(i.weight / weightSum);
                 x += frac;
-				v.Width = Dim.Percent(frac * 100);
+				v.Width = Dim.Percent((int)(frac * 100));
                 view.Add(v);
 				Subviews[i] = v;
 			}
@@ -63,10 +63,10 @@ namespace fx {
             var y = 0f;
 			foreach(var i in items) {
 				var v = i.GetView();
-                v.Y = Pos.Percent(y);
+                v.Y = Pos.Percent((int)y);
 				var frac = i.Height.fraction.Clamp(i.weight / weightSum);
                 y += frac;
-				v.Height = Dim.Percent(frac * 100);
+				v.Height = Dim.Percent((int)(frac * 100));
 				view.Add(v);
                 Subviews[i] = v;
 			}

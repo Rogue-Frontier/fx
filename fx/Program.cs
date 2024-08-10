@@ -80,14 +80,14 @@ if(false) {
 
 	var _cmd = new Button() {
 		Text = "$ <command>",
-		AutoSize = false,
+		
 		X = X,
 		Y = Y,
 		Width = 12,
 		Height = 1,
 		NoDecorations = true,
 		NoPadding = true,
-		TextAlignment = TextAlignment.Left
+		TextAlignment = Alignment.Start
 	};
 	d.Add([_cmd]);
 
@@ -95,7 +95,7 @@ if(false) {
 		CmdStd.ICmdModel result = null;
 		var context = new ContextMenu() {
 			Position = new(d.Frame.X + _cmd.Frame.X + 1, d.Frame.Y + _cmd.Frame.Y + 1),
-			MenuItems = new([ ..from cmd in cmdList select new MenuItem(cmd.name, "", () => {
+			MenuItems = new([ ..from cmd in cmdList select new MenuItem(title:cmd.name, help:"", action:() => {
 						result = (CmdStd.ICmdModel)cmd.t.GetConstructor(BindingFlags.Instance | BindingFlags.Public, [])!.Invoke([]);
 						_cmd.Width = cmd.name.Length + 2;
 						_cmd.Text = $"$ {cmd.name}";
@@ -115,14 +115,14 @@ if(false) {
 									/*
 									var label = new Label(){
 										Text = flag.doc,
-										AutoSize = false,
+										
 										X = 16,
 										Y = Y,
 										Width = Dim.Fill(),
 										Height = flag.doc.Count(c => c == '\n') + 1
 									};
 									*/
-									b.Toggled += (a, e) => flag.field.SetValue(result, e.NewValue);
+									b.CheckedStateChanging += (a, e) => flag.field.SetValue(result, e.NewValue);
 									d.Add([b, /*label*/]);
 									Y = Pos.Bottom(b);
 								},
@@ -164,14 +164,14 @@ if(false) {
 												var name = sub.GetCustomAttribute<FlagAttribute>()?.name ?? sub.GetCustomAttribute<ArgAttribute>()?.name;
 												var b_sub = new CheckBox() {
 													Text = name,
-													AutoSize = false,
+													
 													X = X,
 													Y = Y,
 													Width = name.Length + 4,
 													Height = 1,
 												};
 
-												b_sub.Toggled += (a, e) => {
+												b_sub.CheckedStateChanging += (a, e) => {
 													//TODO: replace with dict lookup
 													if(subresult == null){
 														flag.field.SetValue(radioresult, subresult = Activator.CreateInstance(flag.field.FieldType));
@@ -191,7 +191,7 @@ if(false) {
 									/*
 									var l = new Label() {
 										Text = $"<{arg.name}>:",
-										AutoSize = false,
+										
 										X = X,
 										Y = Y,
 										Width = arg.name.Length + 3,
@@ -203,7 +203,7 @@ if(false) {
 										Text = hint,
 										X = X,
 										Y = Y,
-										AutoSize = false,
+										
 										Width = 64,
 										Height = 1
 									};
@@ -306,8 +306,8 @@ public class Main {
 			Y = 0,
 			Width = Dim.Fill(),
 			Height = 1,
-			DesiredCursorVisibility = CursorVisibility.Box,
-			TabStop = false,
+			CursorVisibility = CursorVisibility.Box,
+			TabStop =  TabBehavior.NoStop,
 
 
 			ColorScheme = App.Top.ColorScheme with {

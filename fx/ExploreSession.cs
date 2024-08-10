@@ -100,7 +100,7 @@ public class ExploreSession {
 		};
 		cwdChanged += s => pathPane.Title = s;
 		var filter = new TextField {
-			AutoSize = false,
+			
 			X = 0,
 			Y = 0,
 			Width = Dim.Fill(12),
@@ -108,7 +108,7 @@ public class ExploreSession {
 			ColorScheme = Application.Top.ColorScheme with {
 				Focus = new(Color.White, new Color(31, 31, 31))
 			},
-			TabStop = false
+			TabStop =  TabBehavior.NoStop
 		};
 
 
@@ -118,7 +118,7 @@ public class ExploreSession {
 			refresh++;
 		Application.Iteration += Iteration;
 		CancellationTokenSource? filterCancel = null;
-		filter.TextChanged += (a, e) => {
+		filter.TextChanging += (a, e) => {
 			Regex? MakeRegex(string s) {
 				try {
 					return new Regex(s);
@@ -150,37 +150,37 @@ public class ExploreSession {
 				}
 			}
 		});
-		goPrev = new(){ Title = "[<---]", X = Pos.AnchorEnd(24), TabStop = false };
-		goNext = new() { Title = "[--->]", X = Pos.Right(goPrev), TabStop = false };
-		goLeft = new() { Title = "[/../]", X = Pos.Right(goNext), TabStop = false };
-		goTo   = new () { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = false };
+		goPrev = new(){ Title = "[<---]", X = Pos.AnchorEnd(24), TabStop = TabBehavior.TabStop };
+		goNext = new() { Title = "[--->]", X = Pos.Right(goPrev), TabStop =  TabBehavior.TabStop };
+		goLeft = new() { Title = "[/../]", X = Pos.Right(goNext), TabStop = TabBehavior.TabStop };
+		goTo   = new () { Title = "[Goto]", X = Pos.Right(goLeft), TabStop = TabBehavior.TabStop };
 
 		cwdData = new((p, i) => p.entry);
 
 		var sortName = new Label {
 			Text = "name",
-			AutoSize = false,
+			
 			X = 7,
 			Y = 1,
 			Width = 32
 		};
 		var sortType = new Label {
 			Text = "ext",
-			AutoSize = false,
+			
 			X = Pos.Right(sortName),
 			Y = 1,
 			Width = 6
 		};
 		var sortSize = new Label {
 			Text = "logSize",
-			AutoSize = false,
+			
 			X = Pos.Right(sortType),
 			Y = 1,
 			Width = 8
 		};
 		var sortAccessDate = new Label {
 			Text = "lastAccess",
-			AutoSize = false,
+			
 			X = Pos.Right(sortSize),
 			Y = 1,
 			Width = 12
@@ -188,14 +188,14 @@ public class ExploreSession {
 
 		var sortAccessFreq = new Label {
 			Text = "views",
-			AutoSize = false,
+			
 			X = Pos.Right(sortAccessDate),
 			Y = 1,
 			Width = 6
 		};
 		var sortGit = new Label {
 			Text = "repo",
-			AutoSize = false,
+			
 			X = Pos.Right(sortAccessFreq),
 			Y = 1,
 			Width = 8
@@ -270,7 +270,7 @@ public class ExploreSession {
 			quickAccess.MouseEvD(new() {
 				[(int)Button1Pressed] = e => {
 					e.Handled = true;
-					var y = e.MouseEvent.Y;
+					var y = e.MouseEvent.Position.Y;
 					var row = y + quickAccess.ScrollOffsetVertical;
 					var rowObj = quickAccess.GetObjectOnRow(row);
 					if(rowObj == null) {
@@ -291,7 +291,7 @@ public class ExploreSession {
 				},
 				[(int)Button1Released] = e => {
 					e.Handled = true;
-					var y = e.MouseEvent.Y;
+					var y = e.MouseEvent.Position.Y;
 					var row = y + quickAccess.ScrollOffsetVertical;
 					var rowObj = quickAccess.GetObjectOnRow(row);
 					if(rowObj != quickAccess.SelectedObject) {
@@ -306,10 +306,10 @@ public class ExploreSession {
 				[(int)Button3Pressed] = e => {
 					e.Handled = true;
 					var prevObj = quickAccess.SelectedObject;
-					var y = e.MouseEvent.Y;
+					var y = e.MouseEvent.Position.Y;
 					var row = y + quickAccess.ScrollOffsetVertical;
 					var rowObj = quickAccess.GetObjectOnRow(row);
-					var c = SView.ShowContext(quickAccess, [.. HomeSession.GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.X);
+					var c = SView.ShowContext(quickAccess, [.. HomeSession.GetSpecificActions(quickAccess, main, row, rowObj)], y, e.MouseEvent.Position.X);
 					if(row < main.ctx.fx.libraryData.Count) {
 						c.MenuBar.MenuAllClosed += (a, e) => {
 							if(main.ctx.fx.libraryData.Count == 0) {
@@ -368,7 +368,7 @@ public class ExploreSession {
 				},
 				[(int)Button1Pressed | (int)ButtonCtrl] = e => {
 					e.Handled = true;
-					var i = pathList.TopItem + e.MouseEvent.Y;
+					var i = pathList.TopItem + e.MouseEvent.Position.Y;
 					if(i >= cwdData.Count)
 						return;
 					cwdData.Toggle(i);
@@ -379,7 +379,7 @@ public class ExploreSession {
 				},
 				[(int)Button1Pressed] = e => {
 					e.Handled = true;
-					var i = pathList.TopItem + e.MouseEvent.Y;
+					var i = pathList.TopItem + e.MouseEvent.Position.Y;
 					if(i >= cwdData.Count)
 						return;
 					pathList.SelectedItem = i;
@@ -389,7 +389,7 @@ public class ExploreSession {
 				},
 				[(int)Button1Released] = e => {
 					e.Handled = true;
-					var i = pathList.TopItem + e.MouseEvent.Y;
+					var i = pathList.TopItem + e.MouseEvent.Position.Y;
 					if(i >= cwdData.Count)
 						return;
 					cwdData.Toggle(pathList.SelectedItem);
@@ -407,13 +407,13 @@ public class ExploreSession {
 					e.Handled = true;
 					var prev = pathList.SelectedItem;
 
-					var i = pathList.TopItem + e.MouseEvent.Y;
+					var i = pathList.TopItem + e.MouseEvent.Position.Y;
 					if(i >= cwdData.Count) {
-						ShowPathContext(GetPathItem(cwd), e.MouseEvent.Y - 1, e.MouseEvent.X - 1);
+						ShowPathContext(GetPathItem(cwd), e.MouseEvent.Position.Y - 1, e.MouseEvent.Position.X - 1);
 						return;
 					}
 					pathList.SelectedItem = i;
-					var c = ShowPathContext(cwdData.list[i], e.MouseEvent.Y - 1, e.MouseEvent.X);
+					var c = ShowPathContext(cwdData.list[i], e.MouseEvent.Position.Y - 1, e.MouseEvent.Position.X);
 					c.MenuBar.MenuAllClosed += (object? _, EventArgs _) => {
 						if(prev == -1) {
 							return;
@@ -590,12 +590,12 @@ public class ExploreSession {
 			repoList.MouseEvD(new() {
 				[(int)Button1Clicked] = e => {
 
-					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
+					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Position.Y;
 					repoList.SetNeedsDisplay();
 				},
 				[(int)Button3Clicked] = e => {
 					var prev = repoList.SelectedItem;
-					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Y;
+					repoList.SelectedItem = repoList.TopItem + e.MouseEvent.Position.Y;
 
 					repoList.SetNeedsDisplay();
 				}
@@ -732,7 +732,7 @@ public class ExploreSession {
 	public static void ShowProperties (PathItem item) {
 		var d = new Dialog {
 			Title= $"Properties: {item.path}",
-			Width = Dim.Sized(Math.Min(108, Application.Top.Frame.Width - 8)),
+			Width = Dim.Absolute(Math.Min(108, Application.Top.Frame.Width - 8)),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
@@ -1438,9 +1438,9 @@ public class ExploreSession {
 			var openFreq = main.ctx.fx.accessCount.GetValueOrDefault(p.path, 0).ToString().PadLeft(4).PadRight(6);
 			var gitInfo =
 				(p.HasProp(IS_GIT_UNSTAGED) ?
-					$"{new GlyphDefinitions().UnChecked}" ://"\u2574" :
+					$"{new GlyphDefinitions().CheckStateUnChecked}" ://"\u2574" :
 				p.HasProp(IS_GIT_STAGED) ?
-					$"{new GlyphDefinitions().Checked}" :
+					$"{new GlyphDefinitions().CheckStateChecked}" :
 				p.HasProp(IS_GIT_IGNORED) ?
 					$"i" :
 				p.HasProp(IS_GIT_UNCHANGED) ?
@@ -1721,7 +1721,7 @@ public class ExploreSession {
 		var d = new Dialog() {
 			Title = title,
 
-			Width = Dim.Sized(Math.Min(108, Application.Top.Frame.Width - 8)),
+			Width = Dim.Absolute(Math.Min(108, Application.Top.Frame.Width - 8)),
 		};
 		d.KeyDownD(new() {
 			[(int)Enter] = _ => d.RequestStop()
