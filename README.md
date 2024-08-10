@@ -36,5 +36,7 @@ fx is my custom Terminal-based file explorer and multi-tool intended to replace 
 - `Shift+Enter` (EDIT mode): set READ mode.
 - `/` (READ mode): Context menu
 # Configuration
-- Commands.yaml: Provide quick commands for directories and files
-- Executables.yaml: Define aliases to external program paths for use in `Commands.yaml`
+These files are kept in the same directory as the exe
+- `Commands.yaml`: Provide quick commands for directories and files
+- `Executables.yaml`: Define aliases to external program paths for use in `Commands.yaml`. On startup, each command is written to a script file in `executables` which is then set as the program's temporary PATH variable.
+- `fx_state.json`:  Saves the current state of fx user data (libraries, command logs, views)
