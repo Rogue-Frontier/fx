@@ -1,6 +1,0 @@
----
-- name: Desktop
-  links:
-    - path: \%USERPROFILE%/Desktop
-      visible: true
-      
