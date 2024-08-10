@@ -568,7 +568,7 @@ public record Ctx {
 		foreach((var name, var path) in executables) {
 			File.WriteAllText($"{loc}/{name}.{Command.ext}", path);
 		}
-		Commands = de.Deserialize<Command[]>(File.ReadAllText($"{Command.ASSEMBLY}/commands.yaml"));
+		Commands = de.Deserialize<Command[]>(File.ReadAllText($"{Command.ASSEMBLY}/fx_commands.yaml"));
 	}
 	public IEnumerable<MenuItem> GetCommands (PathItem item) => Commands
 		.Where(c => c.Accept(item.path))
@@ -597,7 +597,7 @@ public record Ctx {
 
 
 		public static string SAVE_PATH { get; } =
-			$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/cache.yaml";
+			$"{Command.ASSEMBLY}/fx_cache.yaml";
 
 		public ConcurrentDictionary<string, DirIndex> dir = [];
 		public ConcurrentDictionary<string, PathItem> item = [];

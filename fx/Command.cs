@@ -14,7 +14,7 @@ public record Command () {
 	public bool cd = false;
 
 	public static string ASSEMBLY = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-	public static string EXECUTABLES_PATH = Path.GetFullPath($"{ASSEMBLY}/executables");
+	public static string EXECUTABLES_PATH = Path.GetFullPath($"{ASSEMBLY}/fx_executables");
 	public string fmt { set => exe = @$"""{value}"""; }
 	public string program { set => exe = @$"""{File.ReadAllText($"{EXECUTABLES_PATH}/{value}.{ext}")}"" {{0}}"; }
 
