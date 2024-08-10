@@ -288,7 +288,7 @@ public record QuickAccessTree : ITreeBuilder<IFileTree> {
 			new TreeRoot("Libraries", libraryData),
 			new TreeRoot("Pins", [.. pinData.Select(path => new PinItem(path))]),
 			new TreeRoot("Drives", [
-				..DriveInfo.GetDrives().Select(d => new LibraryItem(d.Name, true))
+				..DriveInfo.GetDrives().Select(d => d.RootDirectory.FullName).Distinct().Select(d => new LibraryItem(d, true))
 			]),
 			new TreeRoot("Recent", [
 				..main.ctx.fx.lastOpened.OrderByDescending(p => p.Value).Select(p => new RecentItem(p.Key, p.Value))

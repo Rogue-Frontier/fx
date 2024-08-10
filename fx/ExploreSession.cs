@@ -798,7 +798,6 @@ public class ExploreSession {
 				//WshShell shell = new WshShell(); //Create a new WshShell Interface
 				//IWshShortcut link = (IWshShortcut)shell.CreateShortcut(path); //Link the interface to our shortcut
 				//yield return IS_LINK_TO.Make(link.TargetPath);
-				throw new Exception("Link unsupported");
 			}
 			if(path.EndsWith(".zip")) {
 				yield return IS_ZIP;

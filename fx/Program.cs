@@ -24,6 +24,7 @@ using System.Runtime.Serialization;
 using Repo = LibGit2Sharp.Repository;
 using App = Terminal.Gui.Application;
 using static Fx;
+using YamlDotNet.Serialization.Utilities;
 
 bool expl = true;
 if(args is [string cwd]) {
@@ -491,7 +492,7 @@ public record OAuth (string email, string clientId, string clientSecret) {
 }
 public record Fx {
 	public static string SAVE_PATH { get; } =
-		$"{Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)}/fx/fx.yaml";
+		$"{Command.ASSEMBLY}/fx_state.yaml";
 	public const string		WORK_ROOT = "%WORKROOT%";
 
 	public HashSet<string> hidden = new();
@@ -543,7 +544,7 @@ public record Ctx {
 	public static string USER_PROFILE => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
 
 	public Cache cache = new();
-	private Deserializer de { get; } = new();
+	private Deserializer de { get; } = new ();
 	private Serializer se { get; } = new ();
 	public Command[] Commands { get; private set; } = [];
 	public Sln sln;
@@ -565,7 +566,7 @@ public record Ctx {
 		Directory.CreateDirectory(loc);
 		var executables = de.Deserialize<Dictionary<string, string>>(File.ReadAllText($"{loc}.yaml"));
 		foreach((var name, var path) in executables) {
-			File.WriteAllText($"{loc}/{name}.bat", path);
+			File.WriteAllText($"{loc}/{name}.{Command.ext}", path);
 		}
 		Commands = de.Deserialize<Command[]>(File.ReadAllText($"{Command.ASSEMBLY}/commands.yaml"));
 	}
