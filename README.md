@@ -3,6 +3,11 @@
 
 fx is my custom Terminal-based file explorer and multi-tool intended to replace `explorer.exe` for everyday usage.
 
+# Build
+
+- Install .NET 8.0
+- Clone `https://github.com/IHaveAStrongPassword/Terminal.Gui` branch `v2_develop`
+
 # Tabs
 - [Home]
 - [Expl]orer
