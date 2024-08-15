@@ -237,7 +237,7 @@ if(false) {
 	};
 }
 try {
-	App.Run();	
+	App.Run();
 } catch (Exception e) {
 	main.ctx.Save();
 	App.Shutdown();

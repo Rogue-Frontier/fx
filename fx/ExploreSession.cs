@@ -772,7 +772,6 @@ public class ExploreSession {
 		}
 		return Process.Start(pi);
 	}
-
 	public static Process StartCmd (string path) {
 		//var setPath = $"set 'PATH=%PATH%;{Path.GetFullPath("Executables")}'";
 		var pi = new ProcessStartInfo("cmd.exe") {
@@ -1467,7 +1466,8 @@ public class ExploreSession {
 				} catch(UnauthorizedAccessException e) { return null; }
 				catch(DirectoryNotFoundException e) { return null; }
 				if(item.path == path) return item;
-				var l = Path.GetDirectoryName(item.path).Length + 1;
+				var l = Path.GetDirectoryName(item.path).Length;
+				if(l > 0) l += 1;
 				return new PathItem(path[l..].Replace("\\", "/"), path, [.. GetProps(path)]);
 			}
 			const string LIBRARIES = "fx:/libraries/";
