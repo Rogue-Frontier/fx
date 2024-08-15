@@ -4,13 +4,12 @@
 fx is my custom Terminal-based file explorer and multi-tool intended to replace `explorer.exe` for everyday usage.
 
 # Build
-
-- Install .NET 8.0
+Requires .NET 8.0
 ```
 git clone git@github.com:Rogue-Frontier/Terminal.Gui.git
 git clone git@github.com:Rogue-Frontier/fx.git
 cd fx/fx
-dotnet run
+dotnet run --configuration Release
 ```
 
 
